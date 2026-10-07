@@ -12,7 +12,7 @@ Django 6.1 + Django REST Framework API on Python 3.14, backed by MySQL. Dependen
 
 ## Product requirements
 
-None of the features below are built yet (see Implemented vs Stub Routes).
+None of the features below are built yet (see Implemented vs Stub Routes). The numbering 1–4 is referenced by the slash commands ("Product requirements 3"), so keep it stable.
 
 1. **Subjects** — each subject has two USD prices: one for a 40-minute class and one for a 60-minute class. Store prices in `DecimalField`, never `FloatField`. The API is read-only for subjects (list and retrieve); admins create and edit them in the Django admin site, so use `ReadOnlyModelViewSet` and register the model in `classes/admin.py`.
 2. **Weekly class scheduling** — a user books a weekly recurring class by choosing subject, day of the week, time, and a duration of 40 or 60 minutes.
@@ -35,6 +35,33 @@ None of the features below are built yet (see Implemented vs Stub Routes).
 - Scope every booking queryset to `request.user`; a student must never see or modify another student's classes or trial lessons. Timeslot clash checks are the exception: they must look at every user's bookings.
 - Prefer `ModelViewSet` registered on a DRF router. When an endpoint does not map onto a model's CRUD (e.g. my schedule, which aggregates and totals), use whatever fits best (`APIView`, a generic view, or a viewset `@action`).
 - Enforce booking rules (full hour, no timeslot clash) on the server in serializers/models, backed by a database constraint where possible; do not rely on the frontend.
+
+## Feature workflow
+
+Each feature goes through the same four steps, driven by the slash commands in `.claude/commands/`:
+
+1. `/create-spec <feature>` — needs a clean working tree. It branches `feature/<feature>` off an up-to-date `main` and writes the feature's spec file. Build features in the order of the table below: later specs pick up rules that earlier ones deferred.
+2. Implement from the spec, in Plan Mode. Do not write tests during implementation. Update the route tables in the same change.
+3. `/test-feature <feature>` — `quantum-test-writer` writes the test file from the spec, then `quantum-test-runner` runs only that file.
+4. `/code-review-feature <feature>` — `quantum-security-reviewer` and `quantum-quality-reviewer` review the branch's changes in parallel. Apply the action plan only after the user approves it, then re-run `/test-feature`.
+
+| Feature | Requirement | Spec file | Routes | Test file |
+| --- | --- | --- | --- | --- |
+| `subjects` | 1 | `.claude/specs/01-subjects.md` | `/subjects/` | `classes/tests/test_subjects.py` |
+| `weekly-classes` | 2 | `.claude/specs/02-weekly-classes.md` | `/classes/` | `classes/tests/test_weekly_classes.py` |
+| `trial-lessons` | 3 | `.claude/specs/03-trial-lessons.md` | `/trial-lessons/` | `classes/tests/test_trial_lessons.py` |
+| `schedule` | 4 | `.claude/specs/04-schedule.md` | `/schedule/` | `classes/tests/test_schedule.py` |
+| `users` | Architecture > Auth | none | `/auth/...` | `core/tests/test_users.py` |
+
+- The test runner and both reviewers are read-only and never fix anything. An implementation bug is fixed in the main session; a test bug goes back to `quantum-test-writer`. Never weaken, skip or delete a test to make it pass.
+- `/test-feature` and `/code-review-feature` refuse to run while the feature's routes are still marked Stub.
+
+### Specs
+
+- `.claude/specs/<NN>-<feature>.md`, written by `/create-spec`, is the detailed contract for one feature and records the decisions the user made on ambiguous behaviour.
+- This file is the source a spec is written from. If a spec and this file contradict each other, stop and ask; do not pick one.
+- A spec's "Deferred rules" section lists rules that wait for a later feature (e.g. the trial lesson clash check on weekly classes before trial lessons exist). A deferred rule is not a bug or a missing test until the spec that picks it up is implemented.
+- `users` has no spec file; this file alone is its spec.
 
 ## Commands
 
@@ -60,15 +87,24 @@ Settings load `.env` from the repo root via `python-dotenv`. Copy `.env.example`
 
 ## Testing
 
-Tests run through pytest with `pytest-django` (`pytest.ini` sets `DJANGO_SETTINGS_MODULE=config.settings`). Each app keeps its tests in its own `tests/` package: `<app>/tests/__init__.py` plus `test_*.py` modules (e.g. `core/tests/test_users.py`). `pytest.ini` does not set `python_files`, so only `test_*.py` / `*_test.py` files are collected.
+Tests run through pytest with `pytest-django` and `model-bakery` (`pytest.ini` sets `DJANGO_SETTINGS_MODULE=config.settings`). Each app keeps its tests in its own `tests/` package: `<app>/tests/__init__.py` plus `test_*.py` modules (e.g. `core/tests/test_users.py`). `pytest.ini` does not set `python_files`, so only `test_*.py` / `*_test.py` files are collected.
 
 The `tests.py` stub that `startapp` generates is not collected and clashes with a `tests/` package of the same name — delete it when creating the app's `tests/` folder.
+
+Tests are normally written by `quantum-test-writer` through `/test-feature`. Tests written by hand follow the same conventions:
+
+- Write tests from the spec, not from the implementation; read the source only for field names and paths.
+- Shared fixtures (`api_client`, `authenticate`) live in a `conftest.py` at the repo root so both apps can use them.
+- Build setup data with `model_bakery` (`baker.make(...)`), and authenticate with `force_authenticate` rather than the JWT flow.
+- One class per action, marked `@pytest.mark.django_db` (e.g. `TestCreateWeeklyClass`), with tests named `test_if_<condition>_returns_<status>`.
+- Use `rest_framework.status` constants, never bare numbers, and compare money as `Decimal`.
 
 ## Architecture
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
 - `core/` — custom user model and auth customisation.
 - `classes/` — domain app for subjects, weekly classes, trial lessons and the schedule; currently an empty scaffold.
+- `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
 ### Auth
 
@@ -84,9 +120,26 @@ Authentication is entirely delegated to Djoser + SimpleJWT; there are no hand-wr
 
 Email uses the console backend, so Djoser emails (activation, password reset) print to the dev server's stdout.
 
+## Claude Code tooling
+
+Commands (`.claude/commands/`):
+
+- `/create-spec <feature>` — creates the feature branch and writes `.claude/specs/<NN>-<feature>.md`. Writes no application code.
+- `/test-feature <feature>` — runs `quantum-test-writer`, then `quantum-test-runner`. Fixes nothing.
+- `/code-review-feature <feature>` — runs both reviewers in parallel and merges their reports. Edits files only after the user approves the action plan.
+
+Agents (`.claude/agents/`):
+
+- `quantum-test-writer` — writes tests from the spec. It may only touch `<app>/tests/` and the root `conftest.py`, and keeps its own project memory under `.claude/agent-memory/`.
+- `quantum-test-runner` — runs one test file and classifies each failure as an implementation bug, a test bug or an environment problem. Read-only.
+- `quantum-security-reviewer` — reviews changed code for permissions, queryset scoping, serializer exposure and rule bypasses. Read-only.
+- `quantum-quality-reviewer` — reviews changed code for project conventions, Django and DRF idioms and spec conformance. Read-only.
+
+The command and agent files refer to this file by heading name and requirement number ("Product requirements 3", "API conventions", "Architecture > Auth", "Implemented vs Stub Routes") and carry their own copies of the booking rules and the feature table. When a product requirement, an API convention, a heading or a feature name changes here, update those files in the same change.
+
 ## Implemented vs Stub Routes
 
-Keep this section current: whenever a route is added, removed, renamed, or goes from Stub to Implemented, update the tables in the same change.
+Keep this section current: whenever a route is added, removed, renamed, or goes from Stub to Implemented, update the tables in the same change. `/test-feature` and `/code-review-feature` read these tables and stop while a feature's routes are still marked Stub.
 
 - **Implemented** — the route is registered in the URLconf and works.
 - **Stub** — planned from the product requirements, no code yet. Stub paths are proposals and may change when built.
