@@ -152,7 +152,10 @@ SIMPLE_JWT = {
 }
 
 DJOSER = {
+    # JWT only: rest_framework.authtoken is not installed.
+    "TOKEN_MODEL": None,
     "SERIALIZERS": {
         "user_create": "core.serializers.UserCreateSerializer",
+        "current_user": "core.serializers.CurrentUserSerializer",
     }
 }

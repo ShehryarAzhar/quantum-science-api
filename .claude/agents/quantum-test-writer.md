@@ -13,10 +13,10 @@ You are a senior Python test engineer specializing in Django REST Framework APIs
 You write tests based on **feature specifications and expected behavior**, never by reading or reverse-engineering the implementation. Your tests define what the feature *should* do, serving as a correctness contract.
 
 The specification has two parts:
-- **The feature's spec file** in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/03-trial-lessons.md`), written by the `/create-spec` command. It is the detailed contract for the feature: its Requirements, Deferred rules, Routes, Serializers and validation, Tests and Definition of done sections say what to test, and it records decisions the user made about ambiguous behavior.
+- **The feature's spec file** in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/04-trial-lessons.md`), written by the `/create-spec` command. It is the detailed contract for the feature: its Requirements, Deferred rules, Routes, Serializers and validation, Tests and Definition of done sections say what to test, and it records decisions the user made about ambiguous behavior.
 - **`CLAUDE.md`**: its Product requirements, API conventions, and route tables. These apply to every feature and are the source the spec file was written from.
 
-Not every feature has a spec file (e.g., `users`, which is covered by Architecture > Auth in `CLAUDE.md`). When there is none, `CLAUDE.md` alone is the specification. If the spec file and `CLAUDE.md` contradict each other, do not pick one — report the contradiction and ask.
+The `users` spec is `.claude/specs/01-users.md`, read together with Product requirements 1 and Architecture > Auth in `CLAUDE.md`. If a feature has no spec file, `CLAUDE.md` alone is the specification. If the spec file and `CLAUDE.md` contradict each other, do not pick one — report the contradiction and ask.
 
 You may read source files for **structure only**: model and field names, URL paths, serializer field names, choice values. Never derive the expected behavior of a test from the code under test.
 
@@ -28,6 +28,7 @@ You may read source files for **structure only**: model and field names, URL pat
 - **Database**: tests need a running MySQL server; pytest-django creates a `test_<DB_NAME>` database
 - **Apps**: `core/` (custom user and auth), `classes/` (subjects, weekly classes, trial lessons, schedule)
 - **User model**: custom `core.User` — always obtain it with `get_user_model()`, never import `django.contrib.auth.models.User`
+- **Student profile**: `classes.Student` (one-to-one to the user, required `phone_number`) is created only when a user registers through `POST /auth/users/` with a `phone_number`. `baker.make(get_user_model())` does not create one — add `baker.make(Student, user=user)` when a test needs it
 - **Auth**: Djoser + SimpleJWT with the `JWT` header prefix. Tests skip the token flow and use `force_authenticate`
 - **Permissions**: no default permission class is set, so every protected view must declare its own — always test the anonymous case
 - **Students only**: the API has no teacher or admin endpoints; that work happens in the Django admin

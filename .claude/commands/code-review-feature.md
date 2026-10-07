@@ -17,11 +17,11 @@ Look the feature up in this table:
 
 | Feature | Spec file | Spec in `CLAUDE.md` | Routes | App |
 | --- | --- | --- | --- | --- |
-| `subjects` | `.claude/specs/01-subjects.md` | Product requirements 1 (Subjects) | `/subjects/` | `classes` |
-| `weekly-classes` | `.claude/specs/02-weekly-classes.md` | Product requirements 2 (Weekly class scheduling) | `/classes/` | `classes` |
-| `trial-lessons` | `.claude/specs/03-trial-lessons.md` | Product requirements 3 (Trial lessons) | `/trial-lessons/` | `classes` |
-| `schedule` | `.claude/specs/04-schedule.md` | Product requirements 4 (My schedule) | `/schedule/` | `classes` |
-| `users` | none | Architecture > Auth | `/auth/users/`, `/auth/users/me/`, `/auth/jwt/create/` | `core` |
+| `users` | `.claude/specs/01-users.md` | Product requirements 1 (Users) and Architecture > Auth | `/auth/users/`, `/auth/users/me/`, `/auth/jwt/create/` | `core` |
+| `subjects` | `.claude/specs/02-subjects.md` | Product requirements 2 (Subjects) | `/subjects/` | `classes` |
+| `weekly-classes` | `.claude/specs/03-weekly-classes.md` | Product requirements 3 (Weekly class scheduling) | `/classes/` | `classes` |
+| `trial-lessons` | `.claude/specs/04-trial-lessons.md` | Product requirements 4 (Trial lessons) | `/trial-lessons/` | `classes` |
+| `schedule` | `.claude/specs/05-schedule.md` | Product requirements 5 (My schedule) | `/schedule/` | `classes` |
 
 If $ARGUMENTS is not one of these features, stop
 immediately and say:
@@ -30,6 +30,12 @@ weekly-classes, trial-lessons, schedule, users"
 
 In the steps below, `<app>` and `<spec file>` mean the
 values from the feature's row in the table.
+
+`users` also covers the `Student` profile, whose model
+lives in the `classes` app: for `users`, add
+`classes/models.py`, `classes/admin.py`,
+`classes/migrations/` and `core/signals.py` to the
+source files listed in the steps below.
 
 ---
 
