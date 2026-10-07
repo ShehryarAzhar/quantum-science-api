@@ -74,7 +74,7 @@ After execution, analyze results across these dimensions:
 - **Root cause hypothesis**: What in the implementation or test is likely causing this
 - **Relevant project rule**: The requirement in the feature's spec file, or the product requirement or API convention in `CLAUDE.md`, that the failure relates to
 
-The spec is the feature's spec file in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/03-trial-lessons.md`), together with the Product requirements, API conventions and route tables in `CLAUDE.md`. Not every feature has a spec file (e.g., `users`); when there is none, `CLAUDE.md` alone is the spec.
+The spec is the feature's spec file in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/04-trial-lessons.md`), together with the Product requirements, API conventions and route tables in `CLAUDE.md`. The `users` spec is `.claude/specs/01-users.md`, read together with Product requirements 1 and Architecture > Auth in `CLAUDE.md`. If a feature has no spec file, `CLAUDE.md` alone is the spec.
 
 To classify a failure, read the test, the relevant requirement in the spec file and `CLAUDE.md`, and the code under test. Check the spec file's "Deferred rules" section before calling something an implementation bug: a rule deferred to a later spec is not expected to work yet. If the spec file and `CLAUDE.md` contradict each other on the behavior a failing test checks, do not classify the failure — report the contradiction for the user to resolve.
 

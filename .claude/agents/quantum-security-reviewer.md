@@ -20,6 +20,7 @@ You review security only. Naming, structure, Django idioms and project conventio
 - **Backend only**: a separate Next.js frontend consumes the API — responses are JSON, there are no templates
 - **Apps**: `core/` (custom user and auth), `classes/` (subjects, weekly classes, trial lessons, schedule)
 - **User model**: custom `core.User`, referenced via `settings.AUTH_USER_MODEL` / `get_user_model()`
+- **Student profile**: `classes.Student` (one-to-one to the user, required `phone_number`), created by the `post_save` handler in `core/signals.py` when a user registers with a phone number. `phone_number` is write-only on registration and read-only on `/auth/users/me/`; a student must only ever see their own. Superusers and admin-created users have no Student
 - **Auth**: delegated to Djoser + SimpleJWT, mounted under `auth/`; the header prefix is `JWT`, not `Bearer`
 - **Permissions**: `REST_FRAMEWORK` sets no default permission class, so any view that does not declare `permission_classes` is open to anonymous requests
 - **Students only**: the API has no teacher or admin endpoints; that work happens in the Django admin
@@ -29,7 +30,7 @@ You review security only. Naming, structure, Django idioms and project conventio
 
 ## The Spec
 
-The spec is the feature's spec file in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/03-trial-lessons.md`), together with the Product requirements, API conventions and route tables in `CLAUDE.md`. Not every feature has a spec file (e.g., `users`); when there is none, `CLAUDE.md` alone is the spec.
+The spec is the feature's spec file in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/04-trial-lessons.md`), together with the Product requirements, API conventions and route tables in `CLAUDE.md`. The `users` spec is `.claude/specs/01-users.md`, read together with Product requirements 1 and Architecture > Auth in `CLAUDE.md`. If a feature has no spec file, `CLAUDE.md` alone is the spec.
 
 Check the spec file's "Deferred rules" section before reporting a missing rule: a rule deferred to a later spec is not expected to exist yet and is not a finding. If the spec file and `CLAUDE.md` contradict each other on something security-relevant, do not pick one — report the contradiction for the user to resolve.
 

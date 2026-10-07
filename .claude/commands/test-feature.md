@@ -16,11 +16,11 @@ Look the feature up in this table:
 
 | Feature | Spec file | Spec in `CLAUDE.md` | Routes | App | Test file |
 | --- | --- | --- | --- | --- | --- |
-| `subjects` | `.claude/specs/01-subjects.md` | Product requirements 1 (Subjects) | `/subjects/` | `classes` | `classes/tests/test_subjects.py` |
-| `weekly-classes` | `.claude/specs/02-weekly-classes.md` | Product requirements 2 (Weekly class scheduling) | `/classes/` | `classes` | `classes/tests/test_weekly_classes.py` |
-| `trial-lessons` | `.claude/specs/03-trial-lessons.md` | Product requirements 3 (Trial lessons) | `/trial-lessons/` | `classes` | `classes/tests/test_trial_lessons.py` |
-| `schedule` | `.claude/specs/04-schedule.md` | Product requirements 4 (My schedule) | `/schedule/` | `classes` | `classes/tests/test_schedule.py` |
-| `users` | none | Architecture > Auth | `/auth/users/`, `/auth/users/me/`, `/auth/jwt/create/` | `core` | `core/tests/test_users.py` |
+| `users` | `.claude/specs/01-users.md` | Product requirements 1 (Users) and Architecture > Auth | `/auth/users/`, `/auth/users/me/`, `/auth/jwt/create/` | `core` | `core/tests/test_users.py` |
+| `subjects` | `.claude/specs/02-subjects.md` | Product requirements 2 (Subjects) | `/subjects/` | `classes` | `classes/tests/test_subjects.py` |
+| `weekly-classes` | `.claude/specs/03-weekly-classes.md` | Product requirements 3 (Weekly class scheduling) | `/classes/` | `classes` | `classes/tests/test_weekly_classes.py` |
+| `trial-lessons` | `.claude/specs/04-trial-lessons.md` | Product requirements 4 (Trial lessons) | `/trial-lessons/` | `classes` | `classes/tests/test_trial_lessons.py` |
+| `schedule` | `.claude/specs/05-schedule.md` | Product requirements 5 (My schedule) | `/schedule/` | `classes` | `classes/tests/test_schedule.py` |
 
 If $ARGUMENTS is not one of these features, stop
 immediately and say:
@@ -37,6 +37,11 @@ tables) before testing it."
 In the steps below, `<app>`, `<spec file>` and
 `<test file>` mean the values from the feature's row in
 the table.
+
+`users` also covers the `Student` profile, whose model
+lives in the `classes` app: for `users`, add
+`classes/models.py` and `core/signals.py` to the source
+files listed in the steps below.
 
 Spec files are written by `/create-spec`. If the
 feature's spec file is "none" or does not exist, tell

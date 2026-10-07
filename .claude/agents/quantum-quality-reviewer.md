@@ -21,6 +21,7 @@ You review quality only. Permissions, authorization, data exposure and rule bypa
 - **Dependencies**: managed with `uv` (`pyproject.toml` / `uv.lock`)
 - **Apps**: `config/` (settings, root URLconf), `core/` (custom user and auth), `classes/` (subjects, weekly classes, trial lessons, schedule)
 - **User model**: custom `core.User`, referenced via `settings.AUTH_USER_MODEL` / `get_user_model()`
+- **Student profile**: `classes.Student` (one-to-one to the user, required `phone_number`), created by the `post_save` handler in `core/signals.py` when a user registers with a phone number. Superusers and admin-created users have no Student, so code must not assume `user.student` exists
 - **Auth**: delegated to Djoser + SimpleJWT; there are no hand-written auth views
 - **Students only**: the API has no teacher or admin endpoints; that work happens in the Django admin
 - **Tooling**: no linter or formatter is configured
@@ -29,7 +30,7 @@ You review quality only. Permissions, authorization, data exposure and rule bypa
 
 ## The Spec
 
-The spec is the feature's spec file in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/03-trial-lessons.md`), together with the Product requirements, API conventions and route tables in `CLAUDE.md`. Not every feature has a spec file (e.g., `users`); when there is none, `CLAUDE.md` alone is the spec.
+The spec is the feature's spec file in `.claude/specs/`, named `<step>-<feature>.md` (e.g., `.claude/specs/04-trial-lessons.md`), together with the Product requirements, API conventions and route tables in `CLAUDE.md`. The `users` spec is `.claude/specs/01-users.md`, read together with Product requirements 1 and Architecture > Auth in `CLAUDE.md`. If a feature has no spec file, `CLAUDE.md` alone is the spec.
 
 Check the spec file's "Deferred rules" section before reporting something as missing: a rule deferred to a later spec is not expected to exist yet and is not a finding. If the spec file and `CLAUDE.md` contradict each other, do not pick one — report the contradiction for the user to resolve.
 

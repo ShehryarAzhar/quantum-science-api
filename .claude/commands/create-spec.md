@@ -1,6 +1,6 @@
 ---
 description: Create a spec file and feature branch for a Science Tutor API feature. Pass a feature name e.g. /create-spec trial-lessons
-argument-hint: subjects | weekly-classes | trial-lessons | schedule | <number> <feature name>
+argument-hint: users | subjects | weekly-classes | trial-lessons | schedule | <number> <feature name>
 allowed-tools: Read, Write, Glob, Grep, Bash(git:*)
 ---
 
@@ -21,15 +21,16 @@ from this table:
 
 | Feature | `step_number` | `feature_title` | Spec source in `CLAUDE.md` | Routes |
 | --- | --- | --- | --- | --- |
-| `subjects` | 01 | Subjects | Product requirements 1 | `/subjects/` |
-| `weekly-classes` | 02 | Weekly Class Scheduling | Product requirements 2 | `/classes/` |
-| `trial-lessons` | 03 | Trial Lessons | Product requirements 3 | `/trial-lessons/` |
-| `schedule` | 04 | My Schedule | Product requirements 4 | `/schedule/` |
+| `users` | 01 | Users and Student Profile | Product requirements 1 (Users) and Architecture > Auth | `/auth/users/`, `/auth/users/me/`, `/auth/jwt/create/` |
+| `subjects` | 02 | Subjects | Product requirements 2 | `/subjects/` |
+| `weekly-classes` | 03 | Weekly Class Scheduling | Product requirements 3 | `/classes/` |
+| `trial-lessons` | 04 | Trial Lessons | Product requirements 4 | `/trial-lessons/` |
+| `schedule` | 05 | My Schedule | Product requirements 5 | `/schedule/` |
 
-Otherwise expect `<number> <feature name>` (e.g. `5 class
+Otherwise expect `<number> <feature name>` (e.g. `6 class
 cancellation`) and extract:
 
-1. `step_number` — zero-padded to 2 digits: 5 → 05, 11 → 11
+1. `step_number` — zero-padded to 2 digits: 6 → 06, 11 → 11
 2. `feature_title` — human readable title in Title Case
 3. `feature_slug` — lowercase kebab-case, only a-z, 0-9
    and -, maximum 40 characters
