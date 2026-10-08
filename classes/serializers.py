@@ -192,3 +192,22 @@ class TrialLessonSerializer(SubjectLevelMixin, serializers.ModelSerializer):
     def _student_has_trial_lesson(self):
         student = self.context["request"].user.student
         return TrialLesson.objects.filter(student=student).exists()
+
+
+class ScheduleWeeklyClassSerializer(WeeklyClassSerializer):
+    # A weekly class as the schedule shows it: with its price.
+    price = serializers.DecimalField(
+        max_digits=6, decimal_places=2, read_only=True
+    )
+
+    class Meta(WeeklyClassSerializer.Meta):
+        fields = [*WeeklyClassSerializer.Meta.fields, "price"]
+
+
+class ScheduleSerializer(serializers.Serializer):
+    weekly_classes = ScheduleWeeklyClassSerializer(many=True, read_only=True)
+    trial_lesson = TrialLessonSerializer(read_only=True, allow_null=True)
+    # The sum of the weekly classes' prices; the trial lesson is free.
+    weekly_cost = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )

@@ -154,6 +154,13 @@ class WeeklyClass(models.Model):
         if errors:
             raise ValidationError(errors)
 
+    @property
+    def price(self):
+        # Priced by its own duration, from the subject's current prices.
+        if self.duration == ClassDuration.FORTY:
+            return self.subject.price_40_min
+        return self.subject.price_60_min
+
     def __str__(self):
         # In the active timezone: the admin's inside the admin, UTC elsewhere.
         day, time = slot_in_zone(

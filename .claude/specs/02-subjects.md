@@ -38,7 +38,7 @@ No rule of this feature is deferred, and `.claude/specs/01-users.md` deferred no
 Later specs build on `Subject` and own these decisions, which are not made here:
 - The foreign key from a weekly class to its subject, and what happens to a subject's weekly classes when an admin deletes the subject (`on_delete`) — `.claude/specs/03-weekly-classes.md`.
 - The same for trial lessons — `.claude/specs/04-trial-lessons.md`.
-- Using the two prices to total a student's weekly cost — `.claude/specs/05-schedule.md`.
+- Using the two prices to total a student's weekly cost — `.claude/specs/05-schedule.md`. **Picked up and implemented by `.claude/specs/05-schedule.md`**: `WeeklyClass.price` picks the price by the class's duration, and `GET /schedule/` totals them.
 
 ## Routes
 - `GET /subjects/` — list every subject, ordered by name — public

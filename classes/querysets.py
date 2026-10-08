@@ -19,6 +19,14 @@ from .timeslots import (
 
 
 class WeeklyClassQuerySet(models.QuerySet):
+    def for_student(self, student):
+        # One student's classes, with what their serializer reads loaded.
+        return (
+            self.filter(student=student)
+            .select_related("subject", "level")
+            .prefetch_related("subject__levels")
+        )
+
     def in_week_order(self):
         return self.order_by(day_rank(), "time")
 
@@ -39,6 +47,14 @@ class WeeklyClassQuerySet(models.QuerySet):
 
 
 class TrialLessonQuerySet(models.QuerySet):
+    def for_student(self, student):
+        # One student's lesson, with what its serializer reads loaded.
+        return (
+            self.filter(student=student)
+            .select_related("subject", "level")
+            .prefetch_related("subject__levels")
+        )
+
     def upcoming(self):
         return self.filter(starts_at__gt=timezone.now())
 
