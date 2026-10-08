@@ -12,7 +12,7 @@ Django 6.1 + Django REST Framework API on Python 3.14, backed by MySQL. Dependen
 
 ## Product requirements
 
-Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
+Only requirements 1, 2, 3 and 4 are built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
 
 1. **Users and student profile** — a user registers with username, email, password, first and last name and a phone number, and logs in with a JWT. Auth is delegated to Djoser + SimpleJWT; Architecture > Auth describes how it is built.
    - Email is unique.
@@ -30,23 +30,29 @@ Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). 
 3. **Weekly class scheduling** — a user books a weekly recurring class by choosing subject, level, day of the week, time, and a duration of 40 or 60 minutes.
    - A weekly class has exactly one level: the level the student wants to study the subject at. It must be one of the chosen subject's levels; otherwise the request is rejected with a validation error on `level`. This is checked on every write: a `PATCH` that changes only the subject checks the class's current level, and a `PATCH` that changes only the level checks the class's current subject.
    - A request sends `level` as the level's code (e.g. `"a_level"`); a response returns it as an object with `code` and `name`, like the items of a subject's `levels`.
-   - A level used by a weekly class cannot be deleted, and in the Django admin a level cannot be removed from a subject while weekly classes of that subject use it.
+   - A level used by a weekly class or a trial lesson cannot be deleted, and in the Django admin a level cannot be removed from a subject while weekly classes or trial lessons of that subject use it.
    - A user may book several classes of the same subject in one week.
    - Two classes cannot be booked in the same timeslot. This is enforced across all users, not per student: once any student holds a weekday + hour slot, nobody else can book it.
-   - Classes start only on the full hour (4:00, 5:00, ...); reject any other time.
-   - Reject the booking if an upcoming trial lesson (any student's) occupies that weekday and hour. A trial lesson whose date has passed no longer blocks the slot. Not built yet: it waits for trial lessons (requirement 4).
+   - Classes start only on the full hour (4:00, 5:00, ...); reject any other time. The day and time are UTC.
+   - Reject the booking if an upcoming trial lesson (any student's) occupies that weekday and hour, on a new booking and on an edit. A trial lesson whose start time has passed no longer blocks the slot.
    - A weekly class belongs to a Student, not directly to the user. A logged-in user without a Student gets 403 on every `/classes/` route. Deleting the student deletes their classes.
    - The day of the week is a code, `monday` to `sunday`. The API returns the code as `day` and the label as `day_display`.
    - A request sends `subject` as the subject's id; a response returns it as a nested object with `id`, `name` and `levels` (the same list of `code` and `name` objects as `/subjects/`), and no prices.
    - A student can edit a weekly class (subject, level, day, time, duration) under the same rules as a new booking.
    - A subject that still has weekly classes cannot be deleted.
-4. **Trial lessons** — a user books a trial lesson by choosing a subject and a specific date and time. A trial lesson lasts 60 minutes, is free, and must start on the full hour like weekly classes.
-   - Each student can book only one trial lesson; reject a second booking on the server and back it with a database uniqueness constraint on the user.
+4. **Trial lessons** — a user books a trial lesson by choosing a subject, a level and a specific date and time. A trial lesson lasts 60 minutes, is free, and must start on the full hour like weekly classes.
+   - The date and time are one field, `starts_at`, an ISO 8601 date-time in UTC (e.g. `"2026-10-13T02:00:00Z"`), not a separate date and time. There is no duration or price field.
+   - A trial lesson has exactly one level, under the same rules as a weekly class: it must be one of the chosen subject's levels (otherwise a validation error on `level`, checked on every write including a `PATCH` of only the subject or only the level), a request sends it as the level's code, and a response returns it as an object with `code` and `name`.
+   - A request sends `subject` as the subject's id; a response returns it as a nested object with `id`, `name` and `levels`, and no prices, as on a weekly class.
+   - A trial lesson belongs to a Student, not directly to the user. A logged-in user without a Student gets 403 on every `/trial-lessons/` route. Deleting the student deletes their trial lesson.
+   - Each student can book only one trial lesson; reject a second booking on the server and back it with a database uniqueness constraint (the one-to-one from the trial lesson to the Student, which is itself one-to-one with the user).
+   - A booking whose date and time have already passed is rejected, on a new booking and on an edit.
    - A trial lesson can be marked completed, but only in the Django admin; the completed flag is read-only in the API.
    - While the trial lesson is not completed and its date and time have not passed, the student can edit or delete it. Deleting it frees the student to book another.
-   - Once it is marked completed or its date and time have passed, it is locked: the student cannot edit or delete it through the API, and because it still counts as their one trial lesson, they cannot create another. It stays readable.
-   - Reject the booking if any student's weekly class occupies that time (same weekday and hour as the chosen date and time).
+   - Once it is marked completed or its date and time have passed, it is locked: the student cannot edit or delete it through the API (403, "This trial lesson can no longer be changed."), and because it still counts as their one trial lesson, they cannot create another. It stays readable. Its date and time have passed once its start time is reached.
+   - Reject the booking if any student's weekly class occupies that time (same weekday and hour as the chosen date and time, in UTC).
    - Reject the booking if any student's trial lesson is already booked at that time.
+   - A subject or a level that a trial lesson uses cannot be deleted.
 5. **My schedule** — returns the logged-in user's schedule together with their total cost per week. Trial lessons are free and add nothing to it. The weekly cost is the sum of the prices of all the user's weekly classes, each priced by its own duration (the subject's 40-minute price or its 60-minute price).
 
 ## API conventions
@@ -55,6 +61,7 @@ Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). 
 - Scope every booking queryset to `request.user`; a student must never see or modify another student's classes or trial lessons. Timeslot clash checks are the exception: they must look at every user's bookings.
 - Prefer `ModelViewSet` registered on a DRF router. When an endpoint does not map onto a model's CRUD (e.g. my schedule, which aggregates and totals), use whatever fits best (`APIView`, a generic view, or a viewset `@action`).
 - Enforce booking rules (full hour, no timeslot clash) on the server in serializers/models, backed by a database constraint where possible; do not rely on the frontend.
+- Every date and time in the API is UTC. The server stores, compares and returns UTC; the frontend converts to and from the student's local time.
 
 ## Feature workflow
 
@@ -124,7 +131,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
 - `core/` — custom user model, auth customisation and the registration signal that creates a user's `Student` profile.
-- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Level`, `Subject` and `WeeklyClass` exist so far. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
+- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Level`, `Subject`, `WeeklyClass` and `TrialLesson` exist so far. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403, and `IsTrialLessonOpen`, the object-level permission that answers 403 when a locked trial lesson is edited or deleted. The rules that compare a weekly class with a trial lesson (`weekly_class_clash_error`, `trial_lesson_clash_error`) live in `classes/models.py`, shared by the models' `clean()` and the serializers. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
 ### Auth
@@ -221,12 +228,12 @@ Read-only by design; subjects are managed in the Django admin. Both routes are p
 
 | Method | Path | Status |
 | --- | --- | --- |
-| GET | `/trial-lessons/` | Stub |
-| POST | `/trial-lessons/` | Stub |
-| GET | `/trial-lessons/{id}/` | Stub |
-| PUT | `/trial-lessons/{id}/` | Stub |
-| PATCH | `/trial-lessons/{id}/` | Stub |
-| DELETE | `/trial-lessons/{id}/` | Stub |
+| GET | `/trial-lessons/` | Implemented |
+| POST | `/trial-lessons/` | Implemented |
+| GET | `/trial-lessons/{id}/` | Implemented |
+| PUT | `/trial-lessons/{id}/` | Implemented |
+| PATCH | `/trial-lessons/{id}/` | Implemented |
+| DELETE | `/trial-lessons/{id}/` | Implemented |
 
 ### My schedule
 

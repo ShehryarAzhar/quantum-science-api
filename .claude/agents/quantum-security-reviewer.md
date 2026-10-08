@@ -60,28 +60,31 @@ Out of scope — do not report findings on these:
 ### 1. Authentication and permissions
 - Every new view or viewset declares `permission_classes`. Without it DRF falls back to `AllowAny`
 - Weekly classes, trial lessons and the schedule require `IsAuthenticated`
-- Weekly classes also require `classes.permissions.IsStudent`, listed after `IsAuthenticated`: an anonymous request gets 401, a logged-in user without a Student gets 403
+- Weekly classes and trial lessons also require `classes.permissions.IsStudent`, listed after `IsAuthenticated`: an anonymous request gets 401, a logged-in user without a Student gets 403
 - Subjects use the access level the spec states; do not assume
 - No view overrides `authentication_classes` in a way that bypasses JWT
 
 ### 2. Object-level authorization
 - `get_queryset` of every booking view filters by `request.user`; a class-level `queryset = Model.objects.all()` on its own exposes every student's bookings
-- The owner is set from the request (`serializer.save(user=self.request.user)` in `perform_create`), never taken from the request body. A weekly class is owned by a Student: `serializer.save(student=self.request.user.student)`, and its queryset filters on that student
+- The owner is set from the request (`serializer.save(user=self.request.user)` in `perform_create`), never taken from the request body. A weekly class and a trial lesson are owned by a Student: `serializer.save(student=self.request.user.student)`, and their querysets filter on that student
 - Requesting another student's booking by id returns 404 on retrieve, update and delete
 - The schedule returns only the logged-in student's data
 - Timeslot clash checks are the deliberate exception: they must query every user's bookings. Their error messages must not reveal who holds the slot or any detail of that booking
 
 ### 3. Serializer exposure and mass assignment
 - Serializers list `fields` explicitly; `fields = "__all__"` is a finding
-- `user` (`student` on a weekly class) is read-only or absent from writable fields
+- `user` (`student` on a weekly class or a trial lesson) is read-only or absent from writable fields
 - `completed` on a trial lesson is read-only in the API; it is set only in the Django admin
 - Subject prices are never writable through the API
 - No response includes another student's data, or user fields beyond what the spec lists
 
 ### 4. Server-side rule enforcement
 - The full-hour rule, the 40/60 duration rule, the timeslot clash rule and the one-trial-lesson rule are enforced on the server, on `PUT` and `PATCH` as well as `POST`
-- A weekly class's level is one of its subject's levels on every write. A `PATCH` that sends only `subject` or only `level` is checked against the stored value of the other, so the rule cannot be bypassed by changing them one at a time
-- A locked trial lesson (completed, or its date and time have passed) cannot be edited or deleted through the API, and does not allow a second one to be created
+- The level of a weekly class or a trial lesson is one of its subject's levels on every write. A `PATCH` that sends only `subject` or only `level` is checked against the stored value of the other, so the rule cannot be bypassed by changing them one at a time
+- A locked trial lesson (completed, or its start time has been reached) cannot be edited or deleted through the API: `PUT`, `PATCH` and `DELETE` return 403 before the body is validated. It does not allow a second one to be created
+- A trial lesson cannot be booked or moved into the past
+- The clash between a weekly class and a trial lesson is checked in both directions, on `PUT` and `PATCH` as well as `POST`. It compares rows of two tables, so it has no database constraint
+- Times are compared in UTC with `django.utils.timezone`
 - A rule that must hold under concurrent requests (one trial lesson per student, one booking per slot) is backed by a database constraint, not only by a check in the serializer
 - A constraint violation is turned into a 400 response; an unhandled `IntegrityError` that surfaces as a 500 is a finding
 - Updating a booking excludes the booking itself from its own clash check, without excluding anyone else's
