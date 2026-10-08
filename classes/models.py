@@ -5,7 +5,12 @@ from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
-from django.db.models.functions import ExtractHour, ExtractWeekDay
+from django.db.models.functions import (
+    ExtractHour,
+    ExtractMinute,
+    ExtractWeekDay,
+    Mod,
+)
 from django.utils import timezone
 
 PHONE_NUMBER_MAX_LENGTH = 20
@@ -107,6 +112,40 @@ DJANGO_WEEK_DAY = {
 }
 
 
+MINUTES_PER_DAY = 24 * 60
+MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
+
+
+def utc_offset_minutes(tz):
+    # The zone's own offset right now, so nothing hard-codes it.
+    offset = datetime.datetime.now(tz).utcoffset()
+    return int(offset.total_seconds() // 60)
+
+
+def _shift_slot(day, time, minutes):
+    # A weekly slot has no date, so it is moved as a minute of the week: the
+    # day rolls over and the week wraps (Sunday to Monday) in the modulo.
+    week_minute = (
+        DayOfWeek.values.index(day) * MINUTES_PER_DAY
+        + time.hour * 60
+        + time.minute
+        + minutes
+    ) % MINUTES_PER_WEEK
+    day_index, day_minute = divmod(week_minute, MINUTES_PER_DAY)
+    hour, minute = divmod(day_minute, 60)
+    return DayOfWeek.values[day_index], time.replace(hour=hour, minute=minute)
+
+
+def slot_in_zone(day, time, tz):
+    """A weekly class's UTC day and time as they read in tz."""
+    return _shift_slot(day, time, utc_offset_minutes(tz))
+
+
+def slot_to_utc(day, time, tz):
+    """A day and time given in tz as the UTC day and time that are stored."""
+    return _shift_slot(day, time, -utc_offset_minutes(tz))
+
+
 class ClassDuration(models.IntegerChoices):
     FORTY = 40, "40 minutes"
     SIXTY = 60, "60 minutes"
@@ -148,17 +187,35 @@ def trial_lesson_clash_error(day, time):
     return None
 
 
+def day_rank():
+    # The day codes do not sort in week order, so rank them.
+    return models.Case(
+        *[
+            models.When(day=code, then=models.Value(rank))
+            for rank, code in enumerate(DayOfWeek.values)
+        ],
+        output_field=models.IntegerField(),
+    )
+
+
 class WeeklyClassQuerySet(models.QuerySet):
     def in_week_order(self):
-        # The day codes do not sort in week order, so rank them.
-        day_rank = models.Case(
-            *[
-                models.When(day=code, then=models.Value(rank))
-                for rank, code in enumerate(DayOfWeek.values)
-            ],
-            output_field=models.IntegerField(),
+        return self.order_by(day_rank(), "time")
+
+    def with_week_minute(self, tz):
+        # The minute of the week each class starts on as it reads in tz
+        # (Monday 00:00 is 0): slot_in_zone() in SQL, to order and filter by.
+        return self.annotate(
+            week_minute=Mod(
+                day_rank() * MINUTES_PER_DAY
+                + ExtractHour("time") * 60
+                + ExtractMinute("time")
+                + utc_offset_minutes(tz)
+                + MINUTES_PER_WEEK,
+                MINUTES_PER_WEEK,
+                output_field=models.IntegerField(),
+            )
         )
-        return self.order_by(day_rank, "time")
 
 
 class WeeklyClass(models.Model):
@@ -229,9 +286,13 @@ class WeeklyClass(models.Model):
             raise ValidationError(errors)
 
     def __str__(self):
+        # In the active timezone: the admin's inside the admin, UTC elsewhere.
+        day, time = slot_in_zone(
+            self.day, self.time, timezone.get_current_timezone()
+        )
         return (
-            f"{self.subject} — {self.get_day_display()} "
-            f"{self.time:%H:%M} ({self.student})"
+            f"{self.subject} — {DayOfWeek(day).label} "
+            f"{time:%H:%M} ({self.student})"
         )
 
 
@@ -309,7 +370,9 @@ class TrialLesson(models.Model):
             raise ValidationError(errors)
 
     def __str__(self):
+        # In the active timezone: the admin's inside the admin, UTC elsewhere.
+        starts_at = timezone.localtime(self.starts_at)
         return (
-            f"{self.subject} trial — {self.starts_at:%Y-%m-%d %H:%M} "
+            f"{self.subject} trial — {starts_at:%Y-%m-%d %H:%M} "
             f"({self.student})"
         )

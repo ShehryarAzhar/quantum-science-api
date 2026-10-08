@@ -171,9 +171,9 @@ The `level` field, the nested `subject` and `level` in `to_representation()` and
 
 ## Admin
 `classes/admin.py` registers `TrialLesson` (`TrialLessonAdmin`):
-- `list_display`: student, subject, level, starts_at, completed.
-- `list_filter`: completed, subject, level.
-- `date_hierarchy`: starts_at.
+- `list_display`: student, subject, level, starts_at, completed. `starts_at` is shown and entered in Asia/Karachi ("Starts at (PKT)") and stored in UTC; Django converts it because the admin runs in that timezone (added after this feature was built; see Architecture > Admin timezone in `CLAUDE.md`).
+- `list_filter`: completed, starts_at, subject, level.
+- No `date_hierarchy`: outside UTC it needs MySQL's timezone tables, which are not loaded. The `starts_at` date filter replaces it.
 - `search_fields`: the student's username and email, the subject's name.
 - `autocomplete_fields`: student and subject. The level is a plain dropdown.
 - `list_select_related`: student's user, subject and level.

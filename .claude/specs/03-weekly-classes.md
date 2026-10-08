@@ -174,8 +174,11 @@ The trial lesson clash check is not implemented here (see Deferred rules).
 
 ## Admin
 `classes/admin.py` registers `WeeklyClass` (`WeeklyClassAdmin`) alongside `StudentAdmin` and `SubjectAdmin`:
-- `list_display`: student, subject, level, day, time, duration.
-- `list_filter`: day, duration, subject, level.
+- `list_display`: student, subject, level, day, time, duration. The day and time columns are "Day (PKT)" and "Time (PKT)": the stored UTC values converted to Asia/Karachi.
+- `list_filter`: day (the Asia/Karachi day, `WeeklyClassDayFilter`), duration, subject, level.
+- The list is ordered Monday to Sunday by the Asia/Karachi day and time.
+- `form`: `WeeklyClassAdminForm`. The admin reads and enters the day and time in Asia/Karachi; the form converts them to UTC in `clean()`, before model validation, so every rule below runs on the stored UTC values.
+- The admin runs in Asia/Karachi while the database and the API stay UTC (added after this feature was built; see Architecture > Admin timezone in `CLAUDE.md`).
 - `search_fields`: the student's username and email, the subject's name.
 - `autocomplete_fields`: student and subject (both admins already define `search_fields`). The level is a plain dropdown.
 - `list_select_related`: student's user, subject and level.

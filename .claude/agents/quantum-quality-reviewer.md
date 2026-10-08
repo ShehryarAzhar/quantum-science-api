@@ -84,6 +84,8 @@ Out of scope — do not report findings on these:
 - List endpoints that read a related object use `select_related` / `prefetch_related` instead of one query per row
 - The weekly total is computed without one query per class
 - Time handling uses `django.utils.timezone`, not naive `datetime.now()`
+- The database and the API are UTC; the Django admin shows and accepts Asia/Karachi (`ADMIN_TIME_ZONE`, `core.middleware.AdminTimezoneMiddleware`). A weekly class's `day` + `time` is converted for the admin only by `slot_in_zone()` / `slot_to_utc()` in `classes/models.py`; the conversion is not rewritten elsewhere and no offset is hard-coded
+- Nothing relies on MySQL's timezone tables (no `date_hierarchy`, no datetime `__date` / `__hour` lookup under a non-UTC timezone)
 - Serializer validation uses `validate_<field>` for single-field rules and `validate` for cross-field rules, and raises `serializers.ValidationError`
 - Status codes come from `rest_framework.status`, not bare numbers
 

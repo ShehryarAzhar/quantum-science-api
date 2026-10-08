@@ -85,6 +85,7 @@ Out of scope — do not report findings on these:
 - A trial lesson cannot be booked or moved into the past
 - The clash between a weekly class and a trial lesson is checked in both directions, on `PUT` and `PATCH` as well as `POST`. It compares rows of two tables, so it has no database constraint
 - Times are compared in UTC with `django.utils.timezone`
+- The database and the API are UTC; only the Django admin runs in Asia/Karachi, through `core.middleware.AdminTimezoneMiddleware`. A timezone activated without being restored (`timezone.activate()` instead of `timezone.override()`), or activated for a non-admin path, is a finding: it leaks into API responses. A rule that reads the weekday or hour of a datetime must name UTC explicitly, not rely on the active timezone
 - A rule that must hold under concurrent requests (one trial lesson per student, one booking per slot) is backed by a database constraint, not only by a check in the serializer
 - A constraint violation is turned into a 400 response; an unhandled `IntegrityError` that surfaces as a 500 is a finding
 - Updating a booking excludes the booking itself from its own clash check, without excluding anyone else's

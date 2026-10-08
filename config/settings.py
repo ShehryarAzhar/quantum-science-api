@@ -56,6 +56,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.AdminTimezoneMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -117,6 +118,10 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
+
+# The database and the API are UTC. Only the Django admin shows and accepts
+# this timezone (core.middleware.AdminTimezoneMiddleware).
+ADMIN_TIME_ZONE = "Asia/Karachi"
 
 USE_I18N = True
 
