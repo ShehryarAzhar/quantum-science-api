@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Student, Subject, WeeklyClass
+from .models import Level, Student, Subject, WeeklyClass
 
 
 @admin.register(Student)
@@ -16,11 +16,25 @@ class StudentAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related("user")
 
 
+@admin.register(Level)
+class LevelAdmin(admin.ModelAdmin):
+    list_display = ("name", "code")
+    search_fields = ("name",)
+
+
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "level", "price_40_min", "price_60_min")
-    list_filter = ("level",)
+    list_display = ("name", "level_names", "price_40_min", "price_60_min")
+    list_filter = ("levels",)
     search_fields = ("name",)
+    filter_horizontal = ("levels",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("levels")
+
+    @admin.display(description="levels")
+    def level_names(self, subject):
+        return ", ".join(level.name for level in subject.levels.all())
 
 
 @admin.register(WeeklyClass)

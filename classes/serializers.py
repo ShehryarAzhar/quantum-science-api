@@ -5,32 +5,38 @@ from rest_framework.validators import UniqueTogetherValidator
 from .models import (
     TIMESLOT_CONSTRAINT_NAME,
     TIMESLOT_TAKEN_MESSAGE,
+    Level,
     Subject,
     WeeklyClass,
 )
 
 
+class LevelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Level
+        fields = ["code", "name"]
+
+
 class SubjectSerializer(serializers.ModelSerializer):
-    level_display = serializers.CharField(source="get_level_display", read_only=True)
+    levels = LevelSerializer(many=True, read_only=True)
 
     class Meta:
         model = Subject
         fields = [
             "id",
             "name",
-            "level",
-            "level_display",
+            "levels",
             "price_40_min",
             "price_60_min",
         ]
 
 
 class WeeklyClassSubjectSerializer(serializers.ModelSerializer):
-    level_display = serializers.CharField(source="get_level_display", read_only=True)
+    levels = LevelSerializer(many=True, read_only=True)
 
     class Meta:
         model = Subject
-        fields = ["id", "name", "level", "level_display"]
+        fields = ["id", "name", "levels"]
 
 
 class WeeklyClassSerializer(serializers.ModelSerializer):

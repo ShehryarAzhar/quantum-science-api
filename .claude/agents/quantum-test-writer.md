@@ -106,7 +106,7 @@ For every feature, systematically cover whichever of these apply:
 **Deferred rules**: a spec file's "Deferred rules" section lists rules that are not implemented yet because they depend on a feature that does not exist (e.g., the trial lesson clash check on weekly classes before trial lessons are built). Do not write tests for a rule the spec defers to a later spec. Do write tests for a rule that an earlier spec deferred to the feature under test, adding them to the test file of the feature the rule belongs to.
 
 Feature-specific rules from the product requirements (skip any that the feature's spec file defers):
-- **Subjects**: list and retrieve work; POST, PUT, PATCH and DELETE return 405; both prices are returned as decimals; the level is returned as its code (`level`) and its label (`level_display`)
+- **Subjects**: list and retrieve work; POST, PUT, PATCH and DELETE return 405; both prices are returned as decimals; a subject has one or more levels, returned as `levels`, a list of objects with `code` and `name`. The four `Level` rows (`o_level`, `a_level`, `all_levels`, `university`) are created by a data migration and already exist in the test database: fetch them with `Level.objects.get(code=...)` instead of creating them
 - **Weekly classes**:
   - a time that is not on the full hour is rejected
   - a duration other than 40 or 60 is rejected
@@ -114,7 +114,7 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a weekday + hour slot held by *any* student is rejected for everyone
   - a class belongs to a Student: a logged-in user without a Student gets 403 on every `/classes/` route
   - the day is a code, `monday` to `sunday` (`day`), returned with its label (`day_display`)
-  - `subject` is sent as an id and returned as a nested object with `id`, `name`, `level` and `level_display`, and no prices
+  - `subject` is sent as an id and returned as a nested object with `id`, `name` and `levels` (a list of objects with `code` and `name`), and no prices
   - a class can be edited with `PUT` / `PATCH` under the same rules, and does not clash with itself
   - a subject that has weekly classes cannot be deleted (`ProtectedError`)
   - a slot occupied by an upcoming trial lesson (any student's) is rejected
