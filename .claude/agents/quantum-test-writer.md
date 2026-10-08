@@ -115,6 +115,10 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a class belongs to a Student: a logged-in user without a Student gets 403 on every `/classes/` route
   - the day is a code, `monday` to `sunday` (`day`), returned with its label (`day_display`)
   - `subject` is sent as an id and returned as a nested object with `id`, `name` and `levels` (a list of objects with `code` and `name`), and no prices
+  - a class has one required `level`, sent as the level's code (`"a_level"`) and returned as an object with `code` and `name`
+  - the level must be one of the subject's levels, on `POST`, `PUT` and `PATCH`; a `PATCH` of only the subject checks the class's current level, a `PATCH` of only the level checks the class's current subject; the error is always under `level`
+  - every weekly class a test builds needs a level that its subject has: give test subjects their levels explicitly and fetch levels with `Level.objects.get(code=...)`
+  - a level used by a weekly class cannot be deleted (`ProtectedError`), and the subject admin form refuses to remove a level its weekly classes use
   - a class can be edited with `PUT` / `PATCH` under the same rules, and does not clash with itself
   - a subject that has weekly classes cannot be deleted (`ProtectedError`)
   - a slot occupied by an upcoming trial lesson (any student's) is rejected

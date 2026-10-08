@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin
+from django.db.models import Count
 
 from .models import Level, Student, Subject, WeeklyClass
 
@@ -22,8 +24,35 @@ class LevelAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
+class SubjectAdminForm(forms.ModelForm):
+    class Meta:
+        model = Subject
+        fields = "__all__"
+
+    def clean_levels(self):
+        levels = self.cleaned_data["levels"]
+        if self.instance.pk is None:
+            return levels
+        # A weekly class must keep a level its subject still has.
+        in_use = (
+            Level.objects.filter(weekly_classes__subject=self.instance)
+            .exclude(pk__in=levels)
+            .annotate(class_count=Count("weekly_classes"))
+        )
+        errors = [
+            f"{level.name} is used by {level.class_count} weekly "
+            f"class{'' if level.class_count == 1 else 'es'} of this subject "
+            "and cannot be removed."
+            for level in in_use
+        ]
+        if errors:
+            raise forms.ValidationError(errors)
+        return levels
+
+
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
+    form = SubjectAdminForm
     list_display = ("name", "level_names", "price_40_min", "price_60_min")
     list_filter = ("levels",)
     search_fields = ("name",)
@@ -39,9 +68,9 @@ class SubjectAdmin(admin.ModelAdmin):
 
 @admin.register(WeeklyClass)
 class WeeklyClassAdmin(admin.ModelAdmin):
-    list_display = ("student", "subject", "day", "time", "duration")
-    list_filter = ("day", "duration", "subject")
-    list_select_related = ("student__user", "subject")
+    list_display = ("student", "subject", "level", "day", "time", "duration")
+    list_filter = ("day", "duration", "subject", "level")
+    list_select_related = ("student__user", "subject", "level")
     search_fields = (
         "student__user__username",
         "student__user__email",

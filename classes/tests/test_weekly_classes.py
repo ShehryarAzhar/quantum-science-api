@@ -10,7 +10,8 @@ from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 from rest_framework import status
 
-from classes.models import Student, Subject, WeeklyClass
+from classes.admin import SubjectAdminForm
+from classes.models import Level, Student, Subject, WeeklyClass
 
 DAYS = [
     ("monday", "Monday"),
@@ -22,19 +23,40 @@ DAYS = [
     ("sunday", "Sunday"),
 ]
 
-SUBJECT_KEYS = {"id", "name", "level", "level_display"}
-CLASS_KEYS = {"id", "subject", "day", "day_display", "time", "duration"}
+SUBJECT_KEYS = {"id", "name", "levels"}
+LEVEL_KEYS = {"code", "name"}
+CLASS_KEYS = {"id", "subject", "level", "day", "day_display", "time", "duration"}
 CLASH_MESSAGE = "This timeslot is already booked."
 
 
-def make_subject(**kwargs):
+def get_level(code):
+    return Level.objects.get(code=code)
+
+
+def level_data(code):
+    level = get_level(code)
+    return {"code": level.code, "name": level.name}
+
+
+def make_subject(levels=("o_level",), **kwargs):
     defaults = {
-        "level": Subject.Level.O_LEVEL,
         "price_40_min": Decimal("10.00"),
         "price_60_min": Decimal("15.00"),
     }
     defaults.update(kwargs)
-    return baker.make(Subject, **defaults)
+    subject = baker.make(Subject, **defaults)
+    subject.levels.set([get_level(code) for code in levels])
+    return subject
+
+
+def subject_data(subject):
+    return {
+        "id": subject.id,
+        "name": subject.name,
+        "levels": [
+            {"code": level.code, "name": level.name} for level in subject.levels.all()
+        ],
+    }
 
 
 def make_student():
@@ -43,11 +65,15 @@ def make_student():
     return user, student
 
 
-def make_class(student, subject=None, day="monday", hour=16, duration=60):
+def make_class(
+    student, subject=None, day="monday", hour=16, duration=60, level=None
+):
+    subject = subject or make_subject()
     return baker.make(
         WeeklyClass,
         student=student,
-        subject=subject or make_subject(),
+        subject=subject,
+        level=level or subject.levels.first(),
         day=day,
         time=datetime.time(hour),
         duration=duration,
@@ -57,6 +83,7 @@ def make_class(student, subject=None, day="monday", hour=16, duration=60):
 def payload(subject, /, **overrides):
     data = {
         "subject": subject.id,
+        "level": subject.levels.first().code,
         "day": "monday",
         "time": "16:00",
         "duration": 60,
@@ -241,28 +268,113 @@ class TestCreateWeeklyClass:
             "subject": {
                 "id": subject.id,
                 "name": "Physics",
-                "level": "o_level",
-                "level_display": "O Level",
+                "levels": [level_data("o_level")],
             },
+            "level": level_data("o_level"),
             "day": "monday",
             "day_display": "Monday",
             "time": "16:00:00",
             "duration": 60,
         }
 
+    def test_if_subject_has_two_levels_both_are_returned_in_subject(
+        self, student_user, create_class
+    ):
+        subject = make_subject(levels=("o_level", "a_level"))
+
+        response = create_class(payload(subject, level="a_level"))
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["subject"]["levels"] == [
+            level_data("o_level"),
+            level_data("a_level"),
+        ]
+        assert response.data["level"] == level_data("a_level")
+
+    def test_if_level_is_returned_it_has_only_code_and_name(
+        self, student_user, create_class
+    ):
+        subject = make_subject(levels=("university",))
+
+        response = create_class(payload(subject))
+
+        assert set(response.data["level"].keys()) == LEVEL_KEYS
+        assert response.data["level"] == level_data("university")
+
+    @pytest.mark.parametrize(
+        "levels, chosen",
+        [
+            (("a_level",), "a_level"),
+            (("o_level", "a_level", "university"), "o_level"),
+            (("o_level", "a_level", "university"), "university"),
+        ],
+    )
+    def test_if_level_belongs_to_subject_returns_201(
+        self, student_user, create_class, levels, chosen
+    ):
+        subject = make_subject(levels=levels)
+
+        response = create_class(payload(subject, level=chosen))
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert WeeklyClass.objects.get(id=response.data["id"]).level.code == chosen
+
+    def test_if_level_does_not_belong_to_subject_returns_400(
+        self, student_user, create_class
+    ):
+        subject = make_subject(levels=("o_level", "a_level"))
+
+        response = create_class(payload(subject, level="university"))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        assert WeeklyClass.objects.count() == 0
+
+    def test_if_level_does_not_belong_to_single_level_subject_returns_400(
+        self, student_user, create_class
+    ):
+        subject = make_subject(levels=("o_level",))
+
+        response = create_class(payload(subject, level="a_level"))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        assert WeeklyClass.objects.count() == 0
+
+    def test_if_level_code_is_unknown_returns_400(self, student_user, create_class):
+        subject = make_subject()
+
+        response = create_class(payload(subject, level="primary"))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        assert WeeklyClass.objects.count() == 0
+
+    def test_if_level_is_a_nested_object_returns_400(self, student_user, create_class):
+        subject = make_subject()
+
+        response = create_class(
+            payload(subject, level={"code": "o_level", "name": "O Level"})
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        assert WeeklyClass.objects.count() == 0
+
     def test_if_data_is_valid_class_is_stored_for_logged_in_student(
         self, student_user, create_class
     ):
         _, student = student_user
-        subject = make_subject()
+        subject = make_subject(levels=("o_level", "a_level"))
 
         response = create_class(
-            payload(subject, day="friday", time="09:00", duration=40)
+            payload(subject, level="a_level", day="friday", time="09:00", duration=40)
         )
 
         weekly_class = WeeklyClass.objects.get(id=response.data["id"])
         assert weekly_class.student == student
         assert weekly_class.subject == subject
+        assert weekly_class.level == get_level("a_level")
         assert weekly_class.day == "friday"
         assert weekly_class.time == datetime.time(9)
         assert weekly_class.duration == 40
@@ -317,7 +429,7 @@ class TestCreateWeeklyClass:
         assert response.data["day"] == code
         assert response.data["day_display"] == label
 
-    @pytest.mark.parametrize("missing", ["subject", "day", "time", "duration"])
+    @pytest.mark.parametrize("missing", ["subject", "level", "day", "time", "duration"])
     def test_if_field_is_missing_returns_400(self, student_user, create_class, missing):
         subject = make_subject()
         data = payload(subject)
@@ -528,9 +640,14 @@ class TestListWeeklyClasses:
         self, student_user, list_classes
     ):
         _, student = student_user
-        subject = make_subject(name="Chemistry", level=Subject.Level.UNIVERSITY)
+        subject = make_subject(name="Chemistry", levels=("a_level", "university"))
         weekly_class = make_class(
-            student, subject=subject, day="thursday", hour=8, duration=40
+            student,
+            subject=subject,
+            level=get_level("university"),
+            day="thursday",
+            hour=8,
+            duration=40,
         )
 
         response = list_classes()
@@ -542,9 +659,9 @@ class TestListWeeklyClasses:
                 "subject": {
                     "id": subject.id,
                     "name": "Chemistry",
-                    "level": "university",
-                    "level_display": "University Level",
+                    "levels": [level_data("a_level"), level_data("university")],
                 },
+                "level": level_data("university"),
                 "day": "thursday",
                 "day_display": "Thursday",
                 "time": "08:00:00",
@@ -590,12 +707,24 @@ class TestListWeeklyClasses:
         self, api_client
     ):
         one_user, one_student = make_student()
-        make_class(one_student, day="monday", hour=9)
+        make_class(
+            one_student,
+            subject=make_subject(levels=("o_level", "a_level")),
+            day="monday",
+            hour=9,
+        )
         many_user, many_student = make_student()
         for index, day in enumerate(
             ["tuesday", "wednesday", "thursday", "friday", "saturday"]
         ):
-            make_class(many_student, day=day, hour=9 + index)
+            subject = make_subject(levels=("o_level", "a_level", "university"))
+            make_class(
+                many_student,
+                subject=subject,
+                level=get_level(("o_level", "a_level", "university")[index % 3]),
+                day=day,
+                hour=9 + index,
+            )
 
         api_client.force_authenticate(user=one_user)
         with CaptureQueriesContext(connection) as one_class_queries:
@@ -613,9 +742,14 @@ class TestListWeeklyClasses:
 class TestRetrieveWeeklyClass:
     def test_if_class_is_own_returns_200(self, student_user, retrieve_class):
         _, student = student_user
-        subject = make_subject(name="Biology")
+        subject = make_subject(name="Biology", levels=("o_level", "a_level"))
         weekly_class = make_class(
-            student, subject=subject, day="saturday", hour=11, duration=40
+            student,
+            subject=subject,
+            level=get_level("a_level"),
+            day="saturday",
+            hour=11,
+            duration=40,
         )
 
         response = retrieve_class(weekly_class.id)
@@ -626,9 +760,9 @@ class TestRetrieveWeeklyClass:
             "subject": {
                 "id": subject.id,
                 "name": "Biology",
-                "level": "o_level",
-                "level_display": "O Level",
+                "levels": [level_data("o_level"), level_data("a_level")],
             },
+            "level": level_data("a_level"),
             "day": "saturday",
             "day_display": "Saturday",
             "time": "11:00:00",
@@ -644,6 +778,7 @@ class TestRetrieveWeeklyClass:
         response = retrieve_class(weekly_class.id)
 
         assert set(response.data["subject"].keys()) == SUBJECT_KEYS
+        assert set(response.data["level"].keys()) == LEVEL_KEYS
 
     def test_if_class_belongs_to_another_student_returns_404(
         self, student_user, retrieve_class
@@ -666,7 +801,7 @@ class TestUpdateWeeklyClass:
     def test_if_put_changes_all_fields_returns_200(self, student_user, put_class):
         _, student = student_user
         weekly_class = make_class(student, day="monday", hour=16, duration=60)
-        new_subject = make_subject(name="Maths", level=Subject.Level.ALL_GRADES)
+        new_subject = make_subject(name="Maths", levels=("all_levels",))
 
         response = put_class(
             weekly_class.id,
@@ -677,19 +812,81 @@ class TestUpdateWeeklyClass:
         assert response.data["subject"] == {
             "id": new_subject.id,
             "name": "Maths",
-            "level": "all_grades",
-            "level_display": "All Grades (1-O Level)",
+            "levels": [level_data("all_levels")],
         }
+        assert response.data["level"] == level_data("all_levels")
         assert response.data["day"] == "friday"
         assert response.data["day_display"] == "Friday"
         assert response.data["time"] == "10:00:00"
         assert response.data["duration"] == 40
         weekly_class.refresh_from_db()
         assert weekly_class.subject == new_subject
+        assert weekly_class.level == get_level("all_levels")
         assert weekly_class.day == "friday"
         assert weekly_class.time == datetime.time(10)
         assert weekly_class.duration == 40
         assert weekly_class.student == student
+
+    def test_if_put_level_is_another_of_the_subject_returns_200(
+        self, student_user, put_class
+    ):
+        _, student = student_user
+        subject = make_subject(levels=("o_level", "a_level"))
+        weekly_class = make_class(student, subject=subject, level=get_level("o_level"))
+
+        response = put_class(weekly_class.id, payload(subject, level="a_level"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["level"] == level_data("a_level")
+        weekly_class.refresh_from_db()
+        assert weekly_class.level == get_level("a_level")
+
+    def test_if_put_level_is_not_one_of_the_subject_returns_400(
+        self, student_user, put_class
+    ):
+        _, student = student_user
+        subject = make_subject(levels=("o_level", "a_level"))
+        weekly_class = make_class(
+            student, subject=subject, level=get_level("o_level"), day="monday"
+        )
+
+        response = put_class(
+            weekly_class.id,
+            payload(subject, level="university", day="friday", time="10:00"),
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        weekly_class.refresh_from_db()
+        assert weekly_class.level == get_level("o_level")
+        assert weekly_class.day == "monday"
+
+    def test_if_put_new_subject_lacks_the_level_returns_400(
+        self, student_user, put_class
+    ):
+        _, student = student_user
+        weekly_class = make_class(student, level=get_level("o_level"))
+        new_subject = make_subject(levels=("a_level",))
+
+        response = put_class(
+            weekly_class.id, payload(new_subject, level="o_level")
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        weekly_class.refresh_from_db()
+        assert weekly_class.subject != new_subject
+
+    def test_if_put_level_is_missing_returns_400(self, student_user, put_class):
+        _, student = student_user
+        weekly_class = make_class(student)
+        data = payload(weekly_class.subject)
+        del data["level"]
+
+        response = put_class(weekly_class.id, data)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
 
     def test_if_put_keeps_own_slot_returns_200(self, student_user, put_class):
         _, student = student_user
@@ -802,6 +999,118 @@ class TestUpdateWeeklyClass:
         assert set(response.data["subject"].keys()) == SUBJECT_KEYS
         weekly_class.refresh_from_db()
         assert weekly_class.subject == new_subject
+
+    def test_if_patch_changes_only_level_to_another_of_subject_returns_200(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        subject = make_subject(levels=("o_level", "a_level"))
+        weekly_class = make_class(student, subject=subject, level=get_level("o_level"))
+
+        response = patch_class(weekly_class.id, {"level": "a_level"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["level"] == level_data("a_level")
+        weekly_class.refresh_from_db()
+        assert weekly_class.level == get_level("a_level")
+        assert weekly_class.subject == subject
+
+    def test_if_patch_changes_only_level_to_one_subject_lacks_returns_400(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        subject = make_subject(levels=("o_level", "a_level"))
+        weekly_class = make_class(student, subject=subject, level=get_level("o_level"))
+
+        response = patch_class(weekly_class.id, {"level": "university"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        weekly_class.refresh_from_db()
+        assert weekly_class.level == get_level("o_level")
+
+    def test_if_patch_changes_only_subject_to_one_with_current_level_returns_200(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        weekly_class = make_class(
+            student,
+            subject=make_subject(levels=("o_level",)),
+            level=get_level("o_level"),
+        )
+        new_subject = make_subject(levels=("o_level", "a_level"))
+
+        response = patch_class(weekly_class.id, {"subject": new_subject.id})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["subject"]["id"] == new_subject.id
+        assert response.data["level"] == level_data("o_level")
+        weekly_class.refresh_from_db()
+        assert weekly_class.subject == new_subject
+        assert weekly_class.level == get_level("o_level")
+
+    def test_if_patch_changes_only_subject_to_one_lacking_current_level_returns_400(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        old_subject = make_subject(levels=("o_level",))
+        weekly_class = make_class(
+            student, subject=old_subject, level=get_level("o_level")
+        )
+        new_subject = make_subject(levels=("a_level", "university"))
+
+        response = patch_class(weekly_class.id, {"subject": new_subject.id})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+        weekly_class.refresh_from_db()
+        assert weekly_class.subject == old_subject
+
+    def test_if_patch_changes_subject_and_level_to_matching_pair_returns_200(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        weekly_class = make_class(
+            student,
+            subject=make_subject(levels=("o_level",)),
+            level=get_level("o_level"),
+        )
+        new_subject = make_subject(levels=("a_level", "university"))
+
+        response = patch_class(
+            weekly_class.id, {"subject": new_subject.id, "level": "university"}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["level"] == level_data("university")
+        weekly_class.refresh_from_db()
+        assert weekly_class.subject == new_subject
+        assert weekly_class.level == get_level("university")
+
+    def test_if_patch_changes_subject_and_level_to_mismatched_pair_returns_400(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        weekly_class = make_class(student)
+        new_subject = make_subject(levels=("a_level",))
+
+        response = patch_class(
+            weekly_class.id, {"subject": new_subject.id, "level": "university"}
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
+
+    def test_if_patch_level_code_is_unknown_returns_400(
+        self, student_user, patch_class
+    ):
+        _, student = student_user
+        weekly_class = make_class(student)
+
+        response = patch_class(weekly_class.id, {"level": "primary"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "level" in response.data
 
     def test_if_patch_changes_day_to_free_slot_returns_200(
         self, student_user, patch_class
@@ -1012,6 +1321,7 @@ class TestWeeklyClassModelRules:
                 WeeklyClass(
                     student=second,
                     subject=subject,
+                    level=subject.levels.first(),
                     day="monday",
                     time=datetime.time(16),
                     duration=40,
@@ -1026,6 +1336,7 @@ class TestWeeklyClassModelRules:
                 WeeklyClass(
                     student=student,
                     subject=subject,
+                    level=subject.levels.first(),
                     day="funday",
                     time=datetime.time(16),
                     duration=60,
@@ -1041,6 +1352,7 @@ class TestWeeklyClassModelRules:
                 WeeklyClass(
                     student=student,
                     subject=subject,
+                    level=subject.levels.first(),
                     day="monday",
                     time=datetime.time(16),
                     duration=duration,
@@ -1058,6 +1370,7 @@ class TestWeeklyClassModelRules:
                 WeeklyClass(
                     student=student,
                     subject=subject,
+                    level=subject.levels.first(),
                     day="monday",
                     time=time,
                     duration=60,
@@ -1069,6 +1382,7 @@ class TestWeeklyClassModelRules:
         weekly_class = WeeklyClass(
             student=student,
             subject=subject,
+            level=subject.levels.first(),
             day="monday",
             time=datetime.time(16, 30),
             duration=60,
@@ -1078,3 +1392,101 @@ class TestWeeklyClassModelRules:
             weekly_class.full_clean()
 
         assert "time" in error.value.message_dict
+
+    def test_if_level_is_not_one_of_the_subjects_full_clean_rejects_it(self):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level",))
+        weekly_class = WeeklyClass(
+            student=student,
+            subject=subject,
+            level=get_level("university"),
+            day="monday",
+            time=datetime.time(16),
+            duration=60,
+        )
+
+        with pytest.raises(ValidationError) as error:
+            weekly_class.full_clean()
+
+        assert "level" in error.value.message_dict
+
+    def test_if_level_is_one_of_the_subjects_full_clean_accepts_it(self):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level", "a_level"))
+        weekly_class = WeeklyClass(
+            student=student,
+            subject=subject,
+            level=get_level("a_level"),
+            day="monday",
+            time=datetime.time(16),
+            duration=60,
+        )
+
+        weekly_class.full_clean()
+
+
+@pytest.mark.django_db
+class TestLevelProtection:
+    def test_if_level_is_used_by_weekly_class_deleting_it_raises_protected_error(
+        self,
+    ):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level", "a_level"))
+        make_class(student, subject=subject, level=get_level("a_level"))
+
+        with pytest.raises(ProtectedError):
+            get_level("a_level").delete()
+
+        assert Level.objects.filter(code="a_level").exists()
+
+
+def subject_form(subject, levels, **overrides):
+    data = {
+        "name": subject.name,
+        "levels": [get_level(code).pk for code in levels],
+        "price_40_min": "10.00",
+        "price_60_min": "15.00",
+    }
+    data.update(overrides)
+    return SubjectAdminForm(data=data, instance=subject)
+
+
+@pytest.mark.django_db
+class TestSubjectAdminForm:
+    def test_if_level_used_by_weekly_class_is_removed_form_is_invalid(self):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level", "a_level"))
+        make_class(student, subject=subject, level=get_level("a_level"))
+
+        form = subject_form(subject, levels=("o_level",))
+
+        assert not form.is_valid()
+        assert "levels" in form.errors
+
+    def test_if_level_used_by_weekly_class_is_kept_form_is_valid(self):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level", "a_level"))
+        make_class(student, subject=subject, level=get_level("a_level"))
+
+        form = subject_form(subject, levels=("a_level",))
+
+        assert form.is_valid(), form.errors
+
+    def test_if_level_no_class_uses_is_removed_form_is_valid(self):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level", "a_level"))
+        make_class(student, subject=subject, level=get_level("o_level"))
+
+        form = subject_form(subject, levels=("o_level",))
+
+        assert form.is_valid(), form.errors
+
+    def test_if_level_is_used_only_by_another_subjects_classes_form_is_valid(self):
+        _, student = make_student()
+        subject = make_subject(levels=("o_level", "a_level"))
+        other_subject = make_subject(levels=("a_level",))
+        make_class(student, subject=other_subject, level=get_level("a_level"))
+
+        form = subject_form(subject, levels=("o_level",))
+
+        assert form.is_valid(), form.errors

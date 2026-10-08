@@ -10,6 +10,7 @@ PHONE_NUMBER_MAX_LENGTH = 20
 
 TIMESLOT_TAKEN_MESSAGE = "This timeslot is already booked."
 TIMESLOT_CONSTRAINT_NAME = "weekly_class_unique_timeslot"
+LEVEL_NOT_IN_SUBJECT_MESSAGE = "{subject} is not taught at {level}."
 
 phone_number_validator = RegexValidator(
     regex=r"^\+?[0-9]{7,15}\Z",
@@ -96,6 +97,14 @@ def validate_full_hour(value):
         raise ValidationError("Classes start on the full hour.")
 
 
+def level_not_in_subject_error(subject, level):
+    # The one place the rule lives: WeeklyClass.clean() and the serializer
+    # both ask here. Returns the message, or None when the level is fine.
+    if subject.levels.filter(pk=level.pk).exists():
+        return None
+    return LEVEL_NOT_IN_SUBJECT_MESSAGE.format(subject=subject, level=level)
+
+
 class WeeklyClassQuerySet(models.QuerySet):
     def in_week_order(self):
         # The day codes do not sort in week order, so rank them.
@@ -120,6 +129,12 @@ class WeeklyClass(models.Model):
     )
     subject = models.ForeignKey(
         Subject,
+        on_delete=models.PROTECT,
+        related_name="weekly_classes",
+    )
+    # The level the student studies the subject at: one of subject.levels.
+    level = models.ForeignKey(
+        Level,
         on_delete=models.PROTECT,
         related_name="weekly_classes",
     )
@@ -153,6 +168,15 @@ class WeeklyClass(models.Model):
                 name="weekly_class_time_full_hour",
             ),
         ]
+
+    def clean(self):
+        # A many-to-many membership cannot be a database constraint, so the
+        # admin form relies on this and the API on WeeklyClassSerializer.
+        if self.subject_id is None or self.level_id is None:
+            return
+        error = level_not_in_subject_error(self.subject, self.level)
+        if error:
+            raise ValidationError({"level": error})
 
     def __str__(self):
         return (
