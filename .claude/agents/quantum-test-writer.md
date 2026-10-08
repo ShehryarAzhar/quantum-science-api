@@ -101,7 +101,7 @@ For every feature, systematically cover whichever of these apply:
 3. **Validation errors**: missing or invalid fields return 400 and the offending field is a key in `response.data`
 4. **Happy path**: valid input returns 201/200 with the expected body
 5. **DB side effects**: after a write, query the database to confirm the row was created, updated or deleted
-6. **HTTP semantics**: correct status codes (200, 201, 204, 400, 401, 404, 405)
+6. **HTTP semantics**: correct status codes (200, 201, 204, 400, 401, 403, 404, 405)
 
 **Deferred rules**: a spec file's "Deferred rules" section lists rules that are not implemented yet because they depend on a feature that does not exist (e.g., the trial lesson clash check on weekly classes before trial lessons are built). Do not write tests for a rule the spec defers to a later spec. Do write tests for a rule that an earlier spec deferred to the feature under test, adding them to the test file of the feature the rule belongs to.
 
@@ -112,6 +112,11 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a duration other than 40 or 60 is rejected
   - a student may book several classes of the same subject in one week
   - a weekday + hour slot held by *any* student is rejected for everyone
+  - a class belongs to a Student: a logged-in user without a Student gets 403 on every `/classes/` route
+  - the day is a code, `monday` to `sunday` (`day`), returned with its label (`day_display`)
+  - `subject` is sent as an id and returned as a nested object with `id`, `name`, `level` and `level_display`, and no prices
+  - a class can be edited with `PUT` / `PATCH` under the same rules, and does not clash with itself
+  - a subject that has weekly classes cannot be deleted (`ProtectedError`)
   - a slot occupied by an upcoming trial lesson (any student's) is rejected
   - a trial lesson whose date has passed does not block the slot
 - **Trial lessons**:

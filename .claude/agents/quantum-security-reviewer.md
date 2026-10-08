@@ -60,19 +60,20 @@ Out of scope — do not report findings on these:
 ### 1. Authentication and permissions
 - Every new view or viewset declares `permission_classes`. Without it DRF falls back to `AllowAny`
 - Weekly classes, trial lessons and the schedule require `IsAuthenticated`
+- Weekly classes also require `classes.permissions.IsStudent`, listed after `IsAuthenticated`: an anonymous request gets 401, a logged-in user without a Student gets 403
 - Subjects use the access level the spec states; do not assume
 - No view overrides `authentication_classes` in a way that bypasses JWT
 
 ### 2. Object-level authorization
 - `get_queryset` of every booking view filters by `request.user`; a class-level `queryset = Model.objects.all()` on its own exposes every student's bookings
-- The owner is set from the request (`serializer.save(user=self.request.user)` in `perform_create`), never taken from the request body
+- The owner is set from the request (`serializer.save(user=self.request.user)` in `perform_create`), never taken from the request body. A weekly class is owned by a Student: `serializer.save(student=self.request.user.student)`, and its queryset filters on that student
 - Requesting another student's booking by id returns 404 on retrieve, update and delete
 - The schedule returns only the logged-in student's data
 - Timeslot clash checks are the deliberate exception: they must query every user's bookings. Their error messages must not reveal who holds the slot or any detail of that booking
 
 ### 3. Serializer exposure and mass assignment
 - Serializers list `fields` explicitly; `fields = "__all__"` is a finding
-- `user` is read-only or absent from writable fields
+- `user` (`student` on a weekly class) is read-only or absent from writable fields
 - `completed` on a trial lesson is read-only in the API; it is set only in the Django admin
 - Subject prices are never writable through the API
 - No response includes another student's data, or user fields beyond what the spec lists

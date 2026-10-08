@@ -12,7 +12,7 @@ Django 6.1 + Django REST Framework API on Python 3.14, backed by MySQL. Dependen
 
 ## Product requirements
 
-Only requirements 1 and 2 are built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
+Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
 
 1. **Users and student profile** — a user registers with username, email, password, first and last name and a phone number, and logs in with a JWT. Auth is delegated to Djoser + SimpleJWT; Architecture > Auth describes how it is built.
    - Email is unique.
@@ -31,7 +31,12 @@ Only requirements 1 and 2 are built so far (see Implemented vs Stub Routes). The
    - A user may book several classes of the same subject in one week.
    - Two classes cannot be booked in the same timeslot. This is enforced across all users, not per student: once any student holds a weekday + hour slot, nobody else can book it.
    - Classes start only on the full hour (4:00, 5:00, ...); reject any other time.
-   - Reject the booking if an upcoming trial lesson (any student's) occupies that weekday and hour. A trial lesson whose date has passed no longer blocks the slot.
+   - Reject the booking if an upcoming trial lesson (any student's) occupies that weekday and hour. A trial lesson whose date has passed no longer blocks the slot. Not built yet: it waits for trial lessons (requirement 4).
+   - A weekly class belongs to a Student, not directly to the user. A logged-in user without a Student gets 403 on every `/classes/` route. Deleting the student deletes their classes.
+   - The day of the week is a code, `monday` to `sunday`. The API returns the code as `day` and the label as `day_display`.
+   - A request sends `subject` as the subject's id; a response returns it as a nested object with `id`, `name`, `level` and `level_display`, and no prices.
+   - A student can edit a weekly class (subject, day, time, duration) under the same rules as a new booking.
+   - A subject that still has weekly classes cannot be deleted.
 4. **Trial lessons** — a user books a trial lesson by choosing a subject and a specific date and time. A trial lesson lasts 60 minutes, is free, and must start on the full hour like weekly classes.
    - Each student can book only one trial lesson; reject a second booking on the server and back it with a database uniqueness constraint on the user.
    - A trial lesson can be marked completed, but only in the Django admin; the completed flag is read-only in the API.
@@ -116,7 +121,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
 - `core/` — custom user model, auth customisation and the registration signal that creates a user's `Student` profile.
-- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; only `Student` and `Subject` exist so far. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
+- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Subject` and `WeeklyClass` exist so far. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
 ### Auth
@@ -202,12 +207,12 @@ Read-only by design; subjects are managed in the Django admin. Both routes are p
 
 | Method | Path | Status |
 | --- | --- | --- |
-| GET | `/classes/` | Stub |
-| POST | `/classes/` | Stub |
-| GET | `/classes/{id}/` | Stub |
-| PUT | `/classes/{id}/` | Stub |
-| PATCH | `/classes/{id}/` | Stub |
-| DELETE | `/classes/{id}/` | Stub |
+| GET | `/classes/` | Implemented |
+| POST | `/classes/` | Implemented |
+| GET | `/classes/{id}/` | Implemented |
+| PUT | `/classes/{id}/` | Implemented |
+| PATCH | `/classes/{id}/` | Implemented |
+| DELETE | `/classes/{id}/` | Implemented |
 
 ### Trial lessons
 
