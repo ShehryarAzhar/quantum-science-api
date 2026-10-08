@@ -12,7 +12,7 @@ Django 6.1 + Django REST Framework API on Python 3.14, backed by MySQL. Dependen
 
 ## Product requirements
 
-Only requirements 1, 2, 3 and 4 are built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
+All five requirements are built (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
 
 1. **Users and student profile** — a user registers with username, email, password, first and last name and a phone number, and logs in with a JWT. Auth is delegated to Djoser + SimpleJWT; Architecture > Auth describes how it is built.
    - Email is unique.
@@ -54,6 +54,12 @@ Only requirements 1, 2, 3 and 4 are built so far (see Implemented vs Stub Routes
    - Reject the booking if any student's trial lesson is already booked at that time.
    - A subject or a level that a trial lesson uses cannot be deleted.
 5. **My schedule** — returns the logged-in user's schedule together with their total cost per week. Trial lessons are free and add nothing to it. The weekly cost is the sum of the prices of all the user's weekly classes, each priced by its own duration (the subject's 40-minute price or its 60-minute price).
+   - `GET /schedule/` is the only route; it is read-only. The response has three parts: `weekly_classes` (a list), `trial_lesson` (one object, or `null` when the student has none) and `weekly_cost`.
+   - Each item of `weekly_classes` has the fields it has on `/classes/` plus `price`, its own price. `weekly_cost` is the sum of those prices. `/classes/` itself still returns no price.
+   - `weekly_classes` is ordered Monday to Sunday, then by time. With no weekly classes it is an empty list and `weekly_cost` is 0.
+   - `trial_lesson` has exactly the fields it has on `/trial-lessons/` and no price. It is shown even when it is completed or its date and time have passed.
+   - Prices are read from the subject on every request; no price or total is stored. When an admin changes a subject's price, the schedule shows the new price and total from then on.
+   - A logged-in user without a Student gets 403 on `/schedule/`.
 
 ## API conventions
 
@@ -132,7 +138,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
 - `core/` — custom user model, auth customisation, the registration signal that creates a user's `Student` profile, and `core/middleware.py`, which runs the Django admin in Asia/Karachi (see Admin timezone).
-- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Level`, `Subject`, `WeeklyClass` and `TrialLesson` exist so far. `classes/models.py` holds only the models; the code they share sits beside it: `constants.py` (error messages and constraint names), `validators.py`, `timeslots.py` (`DayOfWeek` and the weekly slot helpers), `querysets.py` and `rules.py`. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403, and `IsTrialLessonOpen`, the object-level permission that answers 403 when a locked trial lesson is edited or deleted. The rules that compare a weekly class with a trial lesson (`weekly_class_clash_error`, `trial_lesson_clash_error`) live in `classes/rules.py`, shared by the models' `clean()` and the serializers. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
+- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; its models are `Student`, `Level`, `Subject`, `WeeklyClass` and `TrialLesson`. `classes/models.py` holds only the models; the code they share sits beside it: `constants.py` (error messages and constraint names), `validators.py`, `timeslots.py` (`DayOfWeek` and the weekly slot helpers), `querysets.py` and `rules.py`. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403, and `IsTrialLessonOpen`, the object-level permission that answers 403 when a locked trial lesson is edited or deleted. The rules that compare a weekly class with a trial lesson (`weekly_class_clash_error`, `trial_lesson_clash_error`) live in `classes/rules.py`, shared by the models' `clean()` and the serializers. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix). The schedule is not a viewset: `ScheduleView` is an `APIView` on a plain `path()` beside the router's routes in the same file. `WeeklyClass.price` is the one place a class is priced by its duration; the schedule's `price` and `weekly_cost` both come from it. `for_student(student)` on `WeeklyClassQuerySet` and `TrialLessonQuerySet` is the scoped queryset (one student's bookings, with subject and levels loaded) that the viewsets and the schedule share.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
 ### Auth
@@ -252,4 +258,4 @@ Read-only by design; subjects are managed in the Django admin. Both routes are p
 
 | Method | Path | Status |
 | --- | --- | --- |
-| GET | `/schedule/` | Stub |
+| GET | `/schedule/` | Implemented |

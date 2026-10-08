@@ -140,10 +140,16 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a time occupied by any student's trial lesson is rejected, under `starts_at`
   - a subject or a level that a trial lesson uses cannot be deleted (`ProtectedError`), and the subject admin form refuses to remove a level its trial lessons use
 - **My schedule**:
+  - `GET /schedule/` returns exactly `weekly_classes` (a list), `trial_lesson` (one object or `null`) and `weekly_cost`; it is read-only, so `POST`, `PUT`, `PATCH` and `DELETE` return 405
+  - anonymous is 401; a logged-in user without a Student is 403
   - returns only the logged-in student's classes and trial lesson
-  - the weekly total is the sum of each weekly class priced by its own duration (40-minute or 60-minute price)
-  - trial lessons add nothing to the total
-  - a student with no classes has a total of zero
+  - each weekly class has the `/classes/` fields plus `price`: the subject's 40-minute price for a 40-minute class, its 60-minute price for a 60-minute class; the nested subject has no prices
+  - the weekly total is the sum of each weekly class priced by its own duration (40-minute or 60-minute price), and equals the sum of the returned `price` values
+  - trial lessons add nothing to the total and have no price
+  - the trial lesson is still returned when it is completed or its `starts_at` has passed
+  - a student with no classes has an empty `weekly_classes` and a total of zero
+  - `weekly_classes` is ordered Monday to Sunday, then by time
+  - prices are read live: after a subject's price changes, the schedule shows the new price and total
 
 ## Code Quality Rules
 - Each test must be fully independent — no shared mutable state, no reliance on another test's side effects

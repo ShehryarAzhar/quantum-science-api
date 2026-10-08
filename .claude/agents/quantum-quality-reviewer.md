@@ -83,6 +83,8 @@ Out of scope — do not report findings on these:
 - Models define `__str__`
 - List endpoints that read a related object use `select_related` / `prefetch_related` instead of one query per row
 - The weekly total is computed without one query per class
+- A weekly class is priced in one place, `WeeklyClass.price`; the schedule's `price` field and `weekly_cost` both use it, and the total is summed as `Decimal` from the same loaded classes the response lists
+- One student's bookings are loaded through `for_student()` on `WeeklyClassQuerySet` / `TrialLessonQuerySet`; the filter, `select_related` and `prefetch_related` chain is not repeated per view
 - Time handling uses `django.utils.timezone`, not naive `datetime.now()`
 - The database and the API are UTC; the Django admin shows and accepts Asia/Karachi (`ADMIN_TIME_ZONE`, `core.middleware.AdminTimezoneMiddleware`). A weekly class's `day` + `time` is converted for the admin only by `slot_in_zone()` / `slot_to_utc()` in `classes/timeslots.py`; the conversion is not rewritten elsewhere and no offset is hard-coded
 - Nothing relies on MySQL's timezone tables (no `date_hierarchy`, no datetime `__date` / `__hour` lookup under a non-UTC timezone)

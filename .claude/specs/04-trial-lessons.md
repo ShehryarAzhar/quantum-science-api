@@ -56,7 +56,7 @@ Choices of this spec that are not product rules:
 
 ## Deferred rules
 Deferred to a later spec:
-- **My schedule** (Product requirements 5) — returning the trial lesson with the student's weekly classes, and counting it as free in the weekly cost, belongs to `.claude/specs/05-schedule.md`.
+- **My schedule** (Product requirements 5) — returning the trial lesson with the student's weekly classes, and counting it as free in the weekly cost, belongs to `.claude/specs/05-schedule.md`. **Picked up and implemented by `.claude/specs/05-schedule.md`**.
 
 Picked up from earlier specs:
 - **Trial lesson clash on weekly classes** (`.claude/specs/03-weekly-classes.md`, Deferred rules; Product requirements 3) — a weekly class booking is rejected if an upcoming trial lesson, any student's, occupies that weekday and hour; a trial lesson that has passed no longer blocks the slot. Implemented here in the weekly class serializer, for create, `PUT` and `PATCH`, and in `WeeklyClass.clean()` for the admin.
@@ -161,7 +161,7 @@ The `level` field, the nested `subject` and `level` in `to_representation()` and
 - Base class: `rest_framework.viewsets.ModelViewSet`.
 - `permission_classes = [IsAuthenticated, IsStudent, IsTrialLessonOpen]`, in that order, so an anonymous request gets 401 and a user without a Student gets 403.
 - `serializer_class = TrialLessonSerializer`.
-- `get_queryset()` returns `TrialLesson.objects.filter(student=self.request.user.student).select_related("subject", "level").prefetch_related("subject__levels")`. There is no class-level `queryset`.
+- `get_queryset()` returns `TrialLesson.objects.filter(student=self.request.user.student).select_related("subject", "level").prefetch_related("subject__levels")`. Since `.claude/specs/05-schedule.md` this chain is `TrialLessonQuerySet.for_student(student)`, shared with the schedule. There is no class-level `queryset`.
 - `perform_create()` saves with `student=self.request.user.student`. The serializer reads the same student from its context for the already-booked check.
 - No pagination: `GET /trial-lessons/` returns a plain JSON array.
 
