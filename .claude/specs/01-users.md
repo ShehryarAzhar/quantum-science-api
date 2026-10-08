@@ -41,7 +41,7 @@ No new routes. The feature changes the payloads of routes Djoser already registe
 ## Models and database changes
 `classes.Student` (new):
 - `user` — `OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="student")`. The one-to-one gives a database uniqueness constraint on the user.
-- `phone_number` — `CharField(max_length=PHONE_NUMBER_MAX_LENGTH)` (20), required, validated by `phone_number_validator`, a `RegexValidator` for `^\+?[0-9]{7,15}\Z` (`\Z`, not `$`, so a trailing newline is rejected). Both are defined in `classes/models.py`. Not unique.
+- `phone_number` — `CharField(max_length=PHONE_NUMBER_MAX_LENGTH)` (20), required, validated by `phone_number_validator`, a `RegexValidator` for `^\+?[0-9]{7,15}\Z` (`\Z`, not `$`, so a trailing newline is rejected). `PHONE_NUMBER_MAX_LENGTH` is defined in `classes/constants.py` and the validator in `classes/validators.py`. Not unique.
 - `__str__` returns the user's username.
 
 `core.User` is unchanged.

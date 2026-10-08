@@ -40,7 +40,8 @@ the table.
 
 `users` also covers the `Student` profile, whose model
 lives in the `classes` app: for `users`, add
-`classes/models.py` and `core/signals.py` to the source
+`classes/models.py`, `classes/constants.py`,
+`classes/validators.py` and `core/signals.py` to the source
 files listed in the steps below.
 
 Spec files are written by `/create-spec`. If the
@@ -65,7 +66,9 @@ following context:
   `.claude/specs/` for rules they deferred to this
   feature
 - Source files to read for structure only:
-  - `<app>/models.py`
+  - `<app>/models.py`, and for `classes` the modules
+    beside it: `constants.py`, `validators.py`, `timeslots.py`, 
+    `querysets.py`, `rules.py`
   - `<app>/serializers.py`
   - `<app>/views.py`
   - `<app>/urls.py` and `config/urls.py`
@@ -98,7 +101,9 @@ context:
   feature's section of `CLAUDE.md`
 - Source files to analyze against when diagnosing
   failures:
-  - `<app>/models.py`
+  - `<app>/models.py`, and for `classes` the modules
+    beside it: `constants.py`, `validators.py`, `timeslots.py`, 
+    `querysets.py`, `rules.py`
   - `<app>/serializers.py`
   - `<app>/views.py`
 - Run command:

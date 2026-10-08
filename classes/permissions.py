@@ -1,6 +1,6 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from .models import TRIAL_LESSON_LOCKED_MESSAGE
+from .constants import TRIAL_LESSON_LOCKED_MESSAGE
 
 
 class IsStudent(BasePermission):

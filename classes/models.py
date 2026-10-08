@@ -3,32 +3,25 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models.functions import (
-    ExtractHour,
-    ExtractMinute,
-    ExtractWeekDay,
-    Mod,
-)
 from django.utils import timezone
 
-PHONE_NUMBER_MAX_LENGTH = 20
-
-TIMESLOT_TAKEN_MESSAGE = "This timeslot is already booked."
-TIMESLOT_CONSTRAINT_NAME = "weekly_class_unique_timeslot"
-LEVEL_NOT_IN_SUBJECT_MESSAGE = "{subject} is not taught at {level}."
-FULL_HOUR_MESSAGE = "Classes start on the full hour."
-TRIAL_LESSON_TIMESLOT_CONSTRAINT_NAME = "trial_lesson_unique_starts_at"
-TRIAL_LESSON_FULL_HOUR_CONSTRAINT_NAME = "trial_lesson_starts_at_full_hour"
-TRIAL_LESSON_ALREADY_BOOKED_MESSAGE = "You have already booked a trial lesson."
-TRIAL_LESSON_LOCKED_MESSAGE = "This trial lesson can no longer be changed."
-STARTS_AT_IN_PAST_MESSAGE = "A trial lesson cannot be booked in the past."
-
-phone_number_validator = RegexValidator(
-    regex=r"^\+?[0-9]{7,15}\Z",
-    message="Enter a valid phone number: 7 to 15 digits, optionally starting with +.",
+from .constants import (
+    PHONE_NUMBER_MAX_LENGTH,
+    TIMESLOT_CONSTRAINT_NAME,
+    TIMESLOT_TAKEN_MESSAGE,
+    TRIAL_LESSON_FULL_HOUR_CONSTRAINT_NAME,
+    TRIAL_LESSON_TIMESLOT_CONSTRAINT_NAME,
 )
+from .querysets import TrialLessonQuerySet, WeeklyClassQuerySet
+from .rules import (
+    level_not_in_subject_error,
+    trial_lesson_clash_error,
+    weekly_class_clash_error,
+)
+from .timeslots import DayOfWeek, slot_in_zone
+from .validators import phone_number_validator, validate_full_hour
 
 
 class Student(models.Model):
@@ -89,133 +82,9 @@ class Subject(models.Model):
         return self.name
 
 
-class DayOfWeek(models.TextChoices):
-    # Monday first: the index of a code matches date.weekday().
-    MONDAY = "monday", "Monday"
-    TUESDAY = "tuesday", "Tuesday"
-    WEDNESDAY = "wednesday", "Wednesday"
-    THURSDAY = "thursday", "Thursday"
-    FRIDAY = "friday", "Friday"
-    SATURDAY = "saturday", "Saturday"
-    SUNDAY = "sunday", "Sunday"
-
-
-# The number Django's week_day lookup gives each day: it counts from Sunday.
-DJANGO_WEEK_DAY = {
-    DayOfWeek.SUNDAY: 1,
-    DayOfWeek.MONDAY: 2,
-    DayOfWeek.TUESDAY: 3,
-    DayOfWeek.WEDNESDAY: 4,
-    DayOfWeek.THURSDAY: 5,
-    DayOfWeek.FRIDAY: 6,
-    DayOfWeek.SATURDAY: 7,
-}
-
-
-MINUTES_PER_DAY = 24 * 60
-MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
-
-
-def utc_offset_minutes(tz):
-    # The zone's own offset right now, so nothing hard-codes it.
-    offset = datetime.datetime.now(tz).utcoffset()
-    return int(offset.total_seconds() // 60)
-
-
-def _shift_slot(day, time, minutes):
-    # A weekly slot has no date, so it is moved as a minute of the week: the
-    # day rolls over and the week wraps (Sunday to Monday) in the modulo.
-    week_minute = (
-        DayOfWeek.values.index(day) * MINUTES_PER_DAY
-        + time.hour * 60
-        + time.minute
-        + minutes
-    ) % MINUTES_PER_WEEK
-    day_index, day_minute = divmod(week_minute, MINUTES_PER_DAY)
-    hour, minute = divmod(day_minute, 60)
-    return DayOfWeek.values[day_index], time.replace(hour=hour, minute=minute)
-
-
-def slot_in_zone(day, time, tz):
-    """A weekly class's UTC day and time as they read in tz."""
-    return _shift_slot(day, time, utc_offset_minutes(tz))
-
-
-def slot_to_utc(day, time, tz):
-    """A day and time given in tz as the UTC day and time that are stored."""
-    return _shift_slot(day, time, -utc_offset_minutes(tz))
-
-
 class ClassDuration(models.IntegerChoices):
     FORTY = 40, "40 minutes"
     SIXTY = 60, "60 minutes"
-
-
-def validate_full_hour(value):
-    # A trial lesson passes a datetime: its full hour is judged in UTC.
-    if isinstance(value, datetime.datetime) and timezone.is_aware(value):
-        value = value.astimezone(datetime.UTC)
-    if value.minute or value.second or value.microsecond:
-        raise ValidationError(FULL_HOUR_MESSAGE)
-
-
-def level_not_in_subject_error(subject, level):
-    # The one place the rule lives: the models' clean() and the serializers
-    # all ask here. Returns the message, or None when the level is fine.
-    if subject.levels.filter(pk=level.pk).exists():
-        return None
-    return LEVEL_NOT_IN_SUBJECT_MESSAGE.format(subject=subject, level=level)
-
-
-def weekly_class_clash_error(starts_at):
-    # A trial lesson cannot start on a weekday + hour any weekly class holds.
-    # TrialLesson.clean() and the serializer both ask here. Returns the
-    # message, or None when the slot is free.
-    starts_at = starts_at.astimezone(datetime.UTC)
-    day = DayOfWeek.values[starts_at.weekday()]
-    if WeeklyClass.objects.filter(day=day, time=starts_at.time()).exists():
-        return TIMESLOT_TAKEN_MESSAGE
-    return None
-
-
-def trial_lesson_clash_error(day, time):
-    # A weekly class cannot take a slot an upcoming trial lesson occupies.
-    # WeeklyClass.clean() and the serializer both ask here. Returns the
-    # message, or None when the slot is free.
-    if TrialLesson.objects.upcoming().on_weekly_slot(day, time).exists():
-        return TIMESLOT_TAKEN_MESSAGE
-    return None
-
-
-def day_rank():
-    # The day codes do not sort in week order, so rank them.
-    return models.Case(
-        *[
-            models.When(day=code, then=models.Value(rank))
-            for rank, code in enumerate(DayOfWeek.values)
-        ],
-        output_field=models.IntegerField(),
-    )
-
-
-class WeeklyClassQuerySet(models.QuerySet):
-    def in_week_order(self):
-        return self.order_by(day_rank(), "time")
-
-    def with_week_minute(self, tz):
-        # The minute of the week each class starts on as it reads in tz
-        # (Monday 00:00 is 0): slot_in_zone() in SQL, to order and filter by.
-        return self.annotate(
-            week_minute=Mod(
-                day_rank() * MINUTES_PER_DAY
-                + ExtractHour("time") * 60
-                + ExtractMinute("time")
-                + utc_offset_minutes(tz)
-                + MINUTES_PER_WEEK,
-                MINUTES_PER_WEEK,
-                output_field=models.IntegerField(),
-            )
-        )
 
 
 class WeeklyClass(models.Model):
@@ -294,19 +163,6 @@ class WeeklyClass(models.Model):
             f"{self.subject} — {DayOfWeek(day).label} "
             f"{time:%H:%M} ({self.student})"
         )
-
-
-class TrialLessonQuerySet(models.QuerySet):
-    def upcoming(self):
-        return self.filter(starts_at__gt=timezone.now())
-
-    def on_weekly_slot(self, day, time):
-        # Lessons start on the full hour, so the hour alone identifies the
-        # slot.
-        return self.annotate(
-            utc_week_day=ExtractWeekDay("starts_at", tzinfo=datetime.UTC),
-            utc_hour=ExtractHour("starts_at", tzinfo=datetime.UTC),
-        ).filter(utc_week_day=DJANGO_WEEK_DAY[day], utc_hour=time.hour)
 
 
 class TrialLesson(models.Model):

@@ -58,7 +58,7 @@ Out of scope — do not report findings on these:
 ## Quality Checklist
 
 ### 1. Code in the right place
-- Models in `<app>/models.py`, serializers in `<app>/serializers.py`, views in `<app>/views.py`, routes in `<app>/urls.py`, admin registration in `<app>/admin.py`
+- Models in `<app>/models.py`, serializers in `<app>/serializers.py`, views in `<app>/views.py`, routes in `<app>/urls.py`, admin registration in `<app>/admin.py`. `classes/models.py` holds only the models: the code they share is beside it in `constants.py`, `validators.py`, `timeslots.py`, `querysets.py`, `rules.py`
 - The app's URLconf is included from `config/urls.py`; routes are not declared there directly
 - Validation lives in serializers or models, not in view methods
 - Views stay thin: queryset, permissions, and at most a small `perform_create`. Pricing, clash and locking logic lives in the serializer, the model or a helper
@@ -84,7 +84,7 @@ Out of scope — do not report findings on these:
 - List endpoints that read a related object use `select_related` / `prefetch_related` instead of one query per row
 - The weekly total is computed without one query per class
 - Time handling uses `django.utils.timezone`, not naive `datetime.now()`
-- The database and the API are UTC; the Django admin shows and accepts Asia/Karachi (`ADMIN_TIME_ZONE`, `core.middleware.AdminTimezoneMiddleware`). A weekly class's `day` + `time` is converted for the admin only by `slot_in_zone()` / `slot_to_utc()` in `classes/models.py`; the conversion is not rewritten elsewhere and no offset is hard-coded
+- The database and the API are UTC; the Django admin shows and accepts Asia/Karachi (`ADMIN_TIME_ZONE`, `core.middleware.AdminTimezoneMiddleware`). A weekly class's `day` + `time` is converted for the admin only by `slot_in_zone()` / `slot_to_utc()` in `classes/timeslots.py`; the conversion is not rewritten elsewhere and no offset is hard-coded
 - Nothing relies on MySQL's timezone tables (no `date_hierarchy`, no datetime `__date` / `__hour` lookup under a non-UTC timezone)
 - Serializer validation uses `validate_<field>` for single-field rules and `validate` for cross-field rules, and raises `serializers.ValidationError`
 - Status codes come from `rest_framework.status`, not bare numbers

@@ -97,7 +97,7 @@ New module constants: `TRIAL_LESSON_TIMESLOT_CONSTRAINT_NAME = "trial_lesson_uni
   - It does not reject a `starts_at` in the past: that rule is for student bookings only (see Serializers and validation), and an admin must be able to save a past lesson.
 - `__str__` returns something readable for the admin, e.g. `"<subject> trial — 2026-10-13 02:00 (<student>)"`.
 
-The two cross-model clash rules cannot be database constraints, because each compares rows of two tables. Each lives in one place in `classes/models.py`, called by both the model's `clean()` (admin) and the serializer (API), in the way `level_not_in_subject_error` is:
+The two cross-model clash rules cannot be database constraints, because each compares rows of two tables. Each lives in one place in `classes/rules.py`, called by both the model's `clean()` (admin) and the serializer (API), in the way `level_not_in_subject_error` is:
 - **A weekly class at a trial lesson's time** — the weekday code is `DayOfWeek.values[starts_at.weekday()]` and the hour is `starts_at.time()`, both from the UTC value; the check is whether any `WeeklyClass` has that `day` and `time`.
 - **An upcoming trial lesson at a weekly class's slot** — whether any `TrialLesson` with `starts_at` in the future falls on that `day` and `time`, compared in UTC.
 
@@ -231,7 +231,7 @@ No new dependencies.
 - Do not change `TIME_ZONE` or `USE_TZ`
 - The past-booking rule is in the serializer only; `TrialLesson.clean()` must not reject a past `starts_at`
 - The clash checks' querysets are all weekly classes and all trial lessons; do not reuse a user-scoped queryset for them
-- Each cross-model clash rule is one function in `classes/models.py`, called by the model's `clean()` and by the serializer; neither repeats the query or the message
+- Each cross-model clash rule is one function in `classes/rules.py`, called by the model's `clean()` and by the serializer; neither repeats the query or the message
 - Only an upcoming trial lesson blocks a weekly class slot; a passed one does not, whether or not it is completed
 - The full-hour rule stays the one `validate_full_hour` validator plus a check constraint; do not write a second validator or a serializer `validate` for it
 - The level-and-subject rule is the existing `level_not_in_subject_error()`; do not rewrite it for trial lessons

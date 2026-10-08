@@ -5,11 +5,9 @@ from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from djoser.serializers import UserSerializer as BaseUserSerializer
 from rest_framework import serializers
 
-from classes.models import (
-    PHONE_NUMBER_MAX_LENGTH,
-    Student,
-    phone_number_validator,
-)
+from classes.constants import PHONE_NUMBER_MAX_LENGTH
+from classes.models import Student
+from classes.validators import phone_number_validator
 
 from .signals import PHONE_NUMBER_ATTR
 

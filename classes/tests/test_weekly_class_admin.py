@@ -10,14 +10,8 @@ from model_bakery import baker
 from rest_framework import status
 
 from classes.admin import WeeklyClassAdminForm
-from classes.models import (
-    DayOfWeek,
-    Level,
-    Student,
-    Subject,
-    TrialLesson,
-    WeeklyClass,
-)
+from classes.models import Level, Student, Subject, TrialLesson, WeeklyClass
+from classes.timeslots import DayOfWeek
 
 KARACHI = ZoneInfo("Asia/Karachi")
 CLASH_MESSAGE = "This timeslot is already booked."

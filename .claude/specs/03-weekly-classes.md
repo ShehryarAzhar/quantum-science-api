@@ -164,7 +164,7 @@ The trial lesson clash check is not implemented here (see Deferred rules).
 - Base class: `rest_framework.viewsets.ModelViewSet`.
 - `permission_classes = [IsAuthenticated, IsStudent]`, in that order, so an anonymous request gets 401 and a user without a Student gets 403.
 - `serializer_class = WeeklyClassSerializer`.
-- `get_queryset()` returns `WeeklyClass.objects.filter(student=self.request.user.student).select_related("subject", "level").prefetch_related("subject__levels").in_week_order()`. The filter uses the Student that `IsStudent` already loaded, so it costs no extra query and no join. `select_related("subject", "level")` is there because the nested subject and the nested level would otherwise each cost one query per class, and `prefetch_related("subject__levels")` because its levels would too. `in_week_order()` is a method of `WeeklyClassQuerySet` in `classes/models.py` (the model's manager): it orders Monday to Sunday then by `time` with a `Case`/`When` expression over `DayOfWeek.values`, since the codes do not sort in week order; it lives on the queryset so the schedule feature can reuse it. There is no class-level `queryset`. This scoping is what makes another student's class a 404 on retrieve, update and delete.
+- `get_queryset()` returns `WeeklyClass.objects.filter(student=self.request.user.student).select_related("subject", "level").prefetch_related("subject__levels").in_week_order()`. The filter uses the Student that `IsStudent` already loaded, so it costs no extra query and no join. `select_related("subject", "level")` is there because the nested subject and the nested level would otherwise each cost one query per class, and `prefetch_related("subject__levels")` because its levels would too. `in_week_order()` is a method of `WeeklyClassQuerySet` in `classes/querysets.py` (the model's manager): it orders Monday to Sunday then by `time` with a `Case`/`When` expression over `DayOfWeek.values`, since the codes do not sort in week order; it lives on the queryset so the schedule feature can reuse it. There is no class-level `queryset`. This scoping is what makes another student's class a 404 on retrieve, update and delete.
 - `perform_create()` saves with `student=self.request.user.student`.
 - No pagination: none is configured, so `GET /classes/` returns a plain JSON array.
 
@@ -237,7 +237,7 @@ No new dependencies.
 - The request body takes `subject` as an id; do not accept a nested subject object on input and do not add a separate `subject_id` field
 - The request body takes `level` as a level code; do not accept a level id or a nested level object on input. The response's `level` comes from `LevelSerializer`
 - The level check runs on `POST`, `PUT` and `PATCH`, uses the stored subject or level for whichever a `PATCH` omits, and always reports its error on `level`
-- The level-and-subject rule is the shared `level_not_in_subject_error()` in `classes/models.py`; `WeeklyClass.clean()` and the serializer call it, and neither repeats the query or the message
+- The level-and-subject rule is the shared `level_not_in_subject_error()` in `classes/rules.py`; `WeeklyClass.clean()` and the serializer call it, and neither repeats the query or the message
 - Any queryset that serializes weekly classes uses `select_related("subject", "level")` and prefetches `subject__levels`
 - `level` is `PROTECT`, never `CASCADE` or `SET_NULL`, and never nullable in the final model
 - The data migration that fills old classes never invents a level for a subject that has none

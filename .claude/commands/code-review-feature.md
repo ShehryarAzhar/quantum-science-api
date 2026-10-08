@@ -33,7 +33,8 @@ values from the feature's row in the table.
 
 `users` also covers the `Student` profile, whose model
 lives in the `classes` app: for `users`, add
-`classes/models.py`, `classes/admin.py`,
+`classes/models.py`, `classes/constants.py`,
+`classes/validators.py`, `classes/admin.py`,
 `classes/migrations/` and `core/signals.py` to the
 source files listed in the steps below.
 
@@ -88,7 +89,10 @@ message, with the same context:
   files from the pre-flight check
 - Diff commands to run: `git diff main...HEAD` and
   `git diff HEAD`. Untracked files must be read in full
-- Source files to reference: `<app>/models.py`,
+- Source files to reference: `<app>/models.py` (and for
+  `classes` the modules beside it: `constants.py`,
+  `validators.py`, `timeslots.py`, `querysets.py`,
+  `rules.py`),
   `<app>/serializers.py`, `<app>/views.py`,
   `<app>/urls.py`, `config/urls.py` and
   `config/settings.py`
@@ -106,7 +110,10 @@ message, with the same context:
   files from the pre-flight check
 - Diff commands to run: `git diff main...HEAD` and
   `git diff HEAD`. Untracked files must be read in full
-- Source files to reference: `<app>/models.py`,
+- Source files to reference: `<app>/models.py` (and for
+  `classes` the modules beside it: `constants.py`,
+  `validators.py`, `timeslots.py`, `querysets.py`,
+  `rules.py`),
   `<app>/serializers.py`, `<app>/views.py`,
   `<app>/urls.py`, `<app>/admin.py`,
   `<app>/migrations/`, `config/urls.py` and `CLAUDE.md`
