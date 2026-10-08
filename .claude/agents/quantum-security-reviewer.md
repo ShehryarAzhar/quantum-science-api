@@ -80,6 +80,7 @@ Out of scope — do not report findings on these:
 
 ### 4. Server-side rule enforcement
 - The full-hour rule, the 40/60 duration rule, the timeslot clash rule and the one-trial-lesson rule are enforced on the server, on `PUT` and `PATCH` as well as `POST`
+- A weekly class's level is one of its subject's levels on every write. A `PATCH` that sends only `subject` or only `level` is checked against the stored value of the other, so the rule cannot be bypassed by changing them one at a time
 - A locked trial lesson (completed, or its date and time have passed) cannot be edited or deleted through the API, and does not allow a second one to be created
 - A rule that must hold under concurrent requests (one trial lesson per student, one booking per slot) is backed by a database constraint, not only by a check in the serializer
 - A constraint violation is turned into a 400 response; an unhandled `IntegrityError` that surfaces as a 500 is a finding

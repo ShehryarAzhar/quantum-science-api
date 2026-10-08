@@ -27,7 +27,10 @@ Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). 
    - A level is a level the tutor teaches the subject at. There are four, created by a data migration: `o_level` (O Level), `a_level` (A Level), `all_levels` (All Levels (1-O Level)) and `university` (University Level). A subject has one or more of them, chosen in the Django admin. The API returns them as `levels`, a list of objects with `code` and `name`, in the order listed here.
    - The name is unique.
    - A price is zero or more: a negative price is rejected, a free subject (0.00) is allowed. The two prices are independent; neither has to be lower than the other.
-3. **Weekly class scheduling** — a user books a weekly recurring class by choosing subject, day of the week, time, and a duration of 40 or 60 minutes.
+3. **Weekly class scheduling** — a user books a weekly recurring class by choosing subject, level, day of the week, time, and a duration of 40 or 60 minutes.
+   - A weekly class has exactly one level: the level the student wants to study the subject at. It must be one of the chosen subject's levels; otherwise the request is rejected with a validation error on `level`. This is checked on every write: a `PATCH` that changes only the subject checks the class's current level, and a `PATCH` that changes only the level checks the class's current subject.
+   - A request sends `level` as the level's code (e.g. `"a_level"`); a response returns it as an object with `code` and `name`, like the items of a subject's `levels`.
+   - A level used by a weekly class cannot be deleted, and in the Django admin a level cannot be removed from a subject while weekly classes of that subject use it.
    - A user may book several classes of the same subject in one week.
    - Two classes cannot be booked in the same timeslot. This is enforced across all users, not per student: once any student holds a weekday + hour slot, nobody else can book it.
    - Classes start only on the full hour (4:00, 5:00, ...); reject any other time.
@@ -35,7 +38,7 @@ Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). 
    - A weekly class belongs to a Student, not directly to the user. A logged-in user without a Student gets 403 on every `/classes/` route. Deleting the student deletes their classes.
    - The day of the week is a code, `monday` to `sunday`. The API returns the code as `day` and the label as `day_display`.
    - A request sends `subject` as the subject's id; a response returns it as a nested object with `id`, `name` and `levels` (the same list of `code` and `name` objects as `/subjects/`), and no prices.
-   - A student can edit a weekly class (subject, day, time, duration) under the same rules as a new booking.
+   - A student can edit a weekly class (subject, level, day, time, duration) under the same rules as a new booking.
    - A subject that still has weekly classes cannot be deleted.
 4. **Trial lessons** — a user books a trial lesson by choosing a subject and a specific date and time. A trial lesson lasts 60 minutes, is free, and must start on the full hour like weekly classes.
    - Each student can book only one trial lesson; reject a second booking on the server and back it with a database uniqueness constraint on the user.

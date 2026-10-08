@@ -19,7 +19,7 @@ class WeeklyClassViewSet(ModelViewSet):
     def get_queryset(self):
         return (
             WeeklyClass.objects.filter(student=self.request.user.student)
-            .select_related("subject")
+            .select_related("subject", "level")
             .prefetch_related("subject__levels")
             .in_week_order()
         )

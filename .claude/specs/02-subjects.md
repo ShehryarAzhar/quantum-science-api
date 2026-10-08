@@ -123,7 +123,9 @@ There is no serializer `validate` method and no API error payload for these rule
 - `filter_horizontal`: levels, so an admin picks several levels in the two-box widget.
 - `search_fields`: name. This also lets the later weekly class and trial lesson admins use an autocomplete subject field.
 
-`classes/admin.py` also registers `Level` (`LevelAdmin`): `list_display` name and code, `search_fields` name. The four levels come from the data migration; an admin can rename one or add another there. Deleting a level removes it from its subjects, which can leave a subject with none.
+`classes/admin.py` also registers `Level` (`LevelAdmin`): `list_display` name and code, `search_fields` name. The four levels come from the data migration; an admin can rename one or add another there. Deleting a level removes it from its subjects, which can leave a subject with none; a level that weekly classes use cannot be deleted at all (`PROTECT`, see `.claude/specs/03-weekly-classes.md`).
+
+`SubjectAdmin` uses `SubjectAdminForm`, which refuses to remove a level from a subject while weekly classes of that subject use it (`.claude/specs/03-weekly-classes.md`, Requirements 21).
 
 Admin-only: creating a subject, editing its name, levels or prices, and deleting it. None of these is possible through the API.
 

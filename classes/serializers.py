@@ -8,6 +8,7 @@ from .models import (
     Level,
     Subject,
     WeeklyClass,
+    level_not_in_subject_error,
 )
 
 
@@ -40,11 +41,22 @@ class WeeklyClassSubjectSerializer(serializers.ModelSerializer):
 
 
 class WeeklyClassSerializer(serializers.ModelSerializer):
+    level = serializers.SlugRelatedField(
+        slug_field="code", queryset=Level.objects.all()
+    )
     day_display = serializers.CharField(source="get_day_display", read_only=True)
 
     class Meta:
         model = WeeklyClass
-        fields = ["id", "subject", "day", "day_display", "time", "duration"]
+        fields = [
+            "id",
+            "subject",
+            "level",
+            "day",
+            "day_display",
+            "time",
+            "duration",
+        ]
         validators = [
             # Every student's classes, not only the request user's.
             UniqueTogetherValidator(
@@ -54,10 +66,23 @@ class WeeklyClassSerializer(serializers.ModelSerializer):
             )
         ]
 
+    def validate(self, attrs):
+        # A PATCH may send only one of the two; the other is the stored one.
+        # Both are required on create and PUT, so only a PATCH, which always
+        # has an instance, reaches the fallback.
+        subject = attrs.get("subject") or self.instance.subject
+        level = attrs.get("level") or self.instance.level
+        error = level_not_in_subject_error(subject, level)
+        if error:
+            raise serializers.ValidationError({"level": [error]})
+        return attrs
+
     def to_representation(self, instance):
-        # The subject is written as an id and read as a nested object.
+        # The subject is written as an id and the level as a code; both are
+        # read as nested objects.
         data = super().to_representation(instance)
         data["subject"] = WeeklyClassSubjectSerializer(instance.subject).data
+        data["level"] = LevelSerializer(instance.level).data
         return data
 
     def save(self, **kwargs):
