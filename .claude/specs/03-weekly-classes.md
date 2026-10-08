@@ -23,8 +23,8 @@ Decisions the user made on points `CLAUDE.md` leaves open:
 8. **Owner** — a weekly class belongs to a `Student`, not directly to the user. Deleting the student (or their account) deletes their weekly classes and frees the timeslots.
 9. **Users without a Student** — a logged-in user with no Student profile (a superuser, a user created in the admin) gets 403 on every `/classes/` route.
 10. **Deleting a subject** — a subject that still has weekly classes cannot be deleted (`PROTECT`). An admin must remove or move its classes first.
-11. **Day of the week** — the API uses a text code, `monday` to `sunday`, as `day`, and returns the label (`Monday`) as the read-only `day_display`. Same pattern as the subject's `level` / `level_display`.
-12. **Subject in requests and responses** — a request sends `subject` as the subject's id. A response returns `subject` as a nested object with the subject's `id`, `name`, `level` and `level_display`, from a serializer written for weekly classes only. It carries no prices; those come from the public `/subjects/` routes.
+11. **Day of the week** — the API uses a text code, `monday` to `sunday`, as `day`, and returns the label (`Monday`) as the read-only `day_display`.
+12. **Subject in requests and responses** — a request sends `subject` as the subject's id. A response returns `subject` as a nested object with the subject's `id`, `name` and `levels`, from a serializer written for weekly classes only. `levels` is the same list as on `/subjects/`: one object with `code` and `name` per level of the subject (see `.claude/specs/02-subjects.md`). It carries no prices; those come from the public `/subjects/` routes.
 
 Choices of this spec that are not product rules:
 
@@ -78,7 +78,7 @@ Members are declared Monday first, so that `DayOfWeek.values` is in week order (
 - `day` — `CharField(max_length=9, choices=DayOfWeek.choices)`, required, no default.
 - `time` — `TimeField(validators=[validate_full_hour])`, required.
 - `duration` — `PositiveSmallIntegerField(choices=ClassDuration.choices)`, required, no default.
-- `Day = DayOfWeek` and `Duration = ClassDuration` class attributes, like `Subject.Level`.
+- `Day = DayOfWeek` and `Duration = ClassDuration` class attributes.
 - `Meta.constraints`:
   - `UniqueConstraint(fields=["day", "time"], name="weekly_class_unique_timeslot", violation_error_message=TIMESLOT_TAKEN_MESSAGE)` — `TIMESLOT_TAKEN_MESSAGE` is the module constant `"This timeslot is already booked."`, shared with the serializer, so the admin form shows the same message. One class per weekday + hour across all students. It does not include `student`.
   - `CheckConstraint(condition=Q(day__in=DayOfWeek.values), name="weekly_class_day_valid")`
@@ -95,7 +95,7 @@ The migration is generated with `uv run python manage.py makemigrations classes`
 
 ## Serializers and validation
 `classes.serializers.WeeklyClassSubjectSerializer` (`ModelSerializer` on `Subject`, in the existing `classes/serializers.py`):
-- Fields: `id`, `name`, `level`, `level_display`. `level_display` is declared as in `SubjectSerializer` (read-only `CharField(source="get_level_display")`).
+- Fields: `id`, `name`, `levels`. `levels` is declared as in `SubjectSerializer`: `LevelSerializer(many=True, read_only=True)`, each item an object with `code` and `name`.
 - No prices. It is used only for output, nested in a weekly class; `SubjectSerializer` and the `/subjects/` routes are unchanged.
 
 `classes.serializers.WeeklyClassSerializer` (`ModelSerializer`, in the existing `classes/serializers.py`):
@@ -104,7 +104,7 @@ The migration is generated with `uv run python manage.py makemigrations classes`
 - `subject` — on input, a `PrimaryKeyRelatedField` over all subjects (the `ModelSerializer` default), so the request body sends the id (`"subject": 3`). On output, `to_representation()` replaces it with `WeeklyClassSubjectSerializer(instance.subject).data`, so every response (list, retrieve, and the body returned by create and update) carries the nested object:
 
   ```json
-  "subject": {"id": 3, "name": "Physics", "level": "o_level", "level_display": "O Level"}
+  "subject": {"id": 3, "name": "Physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]}
   ```
 - `day` — the stored code. `day_display` is a declared read-only `CharField(source="get_day_display")`.
 - `time` — DRF's default `TimeField`; returned as `"HH:MM:SS"` (e.g. `"16:00:00"`), and accepts `"16:00"` or `"16:00:00"` as input.
@@ -137,7 +137,7 @@ The trial lesson clash check is not implemented here (see Deferred rules).
 - Base class: `rest_framework.viewsets.ModelViewSet`.
 - `permission_classes = [IsAuthenticated, IsStudent]`, in that order, so an anonymous request gets 401 and a user without a Student gets 403.
 - `serializer_class = WeeklyClassSerializer`.
-- `get_queryset()` returns `WeeklyClass.objects.filter(student=self.request.user.student).select_related("subject").in_week_order()`. The filter uses the Student that `IsStudent` already loaded, so it costs no extra query and no join. `select_related("subject")` is there because the nested subject would otherwise cost one query per class. `in_week_order()` is a method of `WeeklyClassQuerySet` in `classes/models.py` (the model's manager): it orders Monday to Sunday then by `time` with a `Case`/`When` expression over `DayOfWeek.values`, since the codes do not sort in week order; it lives on the queryset so the schedule feature can reuse it. There is no class-level `queryset`. This scoping is what makes another student's class a 404 on retrieve, update and delete.
+- `get_queryset()` returns `WeeklyClass.objects.filter(student=self.request.user.student).select_related("subject").prefetch_related("subject__levels").in_week_order()`. The filter uses the Student that `IsStudent` already loaded, so it costs no extra query and no join. `select_related("subject")` is there because the nested subject would otherwise cost one query per class, and `prefetch_related("subject__levels")` because its levels would too. `in_week_order()` is a method of `WeeklyClassQuerySet` in `classes/models.py` (the model's manager): it orders Monday to Sunday then by `time` with a `Case`/`When` expression over `DayOfWeek.values`, since the codes do not sort in week order; it lives on the queryset so the schedule feature can reuse it. There is no class-level `queryset`. This scoping is what makes another student's class a 404 on retrieve, update and delete.
 - `perform_create()` saves with `student=self.request.user.student`.
 - No pagination: none is configured, so `GET /classes/` returns a plain JSON array.
 
@@ -210,7 +210,7 @@ No new dependencies.
 ## Tests
 Covered by `classes/tests/test_weekly_classes.py`, written and run with `/test-feature weekly-classes`, not as part of implementation. A test student is `baker.make(get_user_model())` plus `baker.make(Student, user=user)`. It must cover:
 - Access: every route returns 401 for an anonymous request and 403 for an authenticated user without a Student
-- Subject shape: in the responses of create, list, retrieve and update, `subject` is an object with exactly `id`, `name`, `level` and `level_display`, matching the booked subject, with no price fields; a request sends `subject` as an id, and a nested object sent as `subject` returns 400
+- Subject shape: in the responses of create, list, retrieve and update, `subject` is an object with exactly `id`, `name` and `levels`, matching the booked subject, with no price fields; `levels` is a list with one `{"code", "name"}` object per level of the subject, and a subject with two levels returns both; a request sends `subject` as an id, and a nested object sent as `subject` returns 400
 - `POST /classes/`: 201 with exactly `id`, `subject`, `day`, `day_display`, `time`, `duration`; the class is stored against the logged-in student; a `student` or `user` value in the body is ignored; both durations accepted; each of the seven day codes accepted with the matching `day_display`
 - Required fields: each of `subject`, `day`, `time`, `duration` missing returns 400
 - Invalid values: unknown subject id, unknown day code, a duration other than 40 or 60 each return 400 and create nothing
@@ -232,7 +232,7 @@ Not covered here: the trial lesson clash (spec 04) and the weekly cost (spec 05)
 - [ ] Each route returns the expected status for an anonymous request (all six `/classes/` routes return 401)
 - [ ] The feature's routes are marked Implemented in `CLAUDE.md`
 - [ ] `uv run python manage.py migrate` applies `classes.0003` cleanly on MySQL, including the three check constraints and the unique constraint
-- [ ] A registered student can `POST /classes/` with `subject`, `day`, `time` and `duration` and gets 201 with `id`, `subject`, `day`, `day_display`, `time` and `duration`, where `subject` was sent as an id and comes back as `{"id", "name", "level", "level_display"}` with no prices
+- [ ] A registered student can `POST /classes/` with `subject`, `day`, `time` and `duration` and gets 201 with `id`, `subject`, `day`, `day_display`, `time` and `duration`, where `subject` was sent as an id and comes back as `{"id", "name", "levels"}` with no prices
 - [ ] `POST /classes/` with `time` `16:30` returns 400 under `time`
 - [ ] `POST /classes/` with a duration of 45 returns 400 under `duration`
 - [ ] A second student booking the same `day` and `time` gets 400 with `"This timeslot is already booked."`, and so does the first student booking it again

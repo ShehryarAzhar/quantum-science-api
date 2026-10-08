@@ -2,35 +2,40 @@ from decimal import Decimal
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
+from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 from rest_framework import status
 
-from classes.models import Subject
+from classes.models import Level, Subject
 
+# The four levels created by the data migration, in the order of the spec table.
 LEVELS = [
-    ('all_grades', 'All Grades (1-O Level)'),
     ('o_level', 'O Level'),
-    ('o_a_level', 'O/A Level'),
+    ('a_level', 'A Level'),
+    ('all_levels', 'All Levels (1-O Level)'),
     ('university', 'University Level'),
 ]
 
-EXPECTED_KEYS = {'id', 'name', 'level', 'level_display', 'price_40_min', 'price_60_min'}
+EXPECTED_KEYS = {'id', 'name', 'levels', 'price_40_min', 'price_60_min'}
 
 
-def make_subject(**kwargs):
-    kwargs.setdefault('level', Subject.Level.O_LEVEL)
+def make_subject(levels=('o_level',), **kwargs):
     kwargs.setdefault('price_40_min', Decimal('10.00'))
     kwargs.setdefault('price_60_min', Decimal('15.00'))
-    return baker.make(Subject, **kwargs)
+    subject = baker.make(Subject, **kwargs)
+    subject.levels.add(*[Level.objects.get(code=code) for code in levels])
+    return subject
 
 
 def expected_body(subject):
     return {
         'id': subject.id,
         'name': subject.name,
-        'level': subject.level,
-        'level_display': subject.get_level_display(),
+        'levels': [
+            {'code': level.code, 'name': level.name}
+            for level in subject.levels.order_by('id')
+        ],
         'price_40_min': subject.price_40_min,
         'price_60_min': subject.price_60_min,
     }
@@ -99,9 +104,17 @@ class TestListSubjects:
         assert response.data == [expected_body(subject)]
         assert set(response.data[0].keys()) == EXPECTED_KEYS
 
+    def test_if_subject_has_several_levels_returns_each_level_in_the_list(self, list_subjects):
+        subject = make_subject(name='Physics', levels=('o_level', 'a_level'))
+
+        response = list_subjects()
+
+        assert response.data == [expected_body(subject)]
+        assert len(response.data[0]['levels']) == 2
+
     def test_if_user_is_authenticated_returns_same_body_as_anonymous(
             self, api_client, authenticate):
-        make_subject(name='Physics')
+        make_subject(name='Physics', levels=('o_level', 'a_level'))
         make_subject(name='Biology')
         anonymous_response = api_client.get('/subjects/')
         authenticate()
@@ -110,6 +123,19 @@ class TestListSubjects:
 
         assert authenticated_response.status_code == status.HTTP_200_OK
         assert authenticated_response.data == anonymous_response.data
+
+    def test_if_there_are_more_subjects_runs_the_same_number_of_queries(self, list_subjects):
+        make_subject(name='Biology', levels=('o_level', 'a_level'))
+        with CaptureQueriesContext(connection) as one_subject:
+            list_subjects()
+        for name in ('Chemistry', 'Maths', 'Physics', 'English'):
+            make_subject(name=name, levels=('o_level', 'university'))
+
+        with CaptureQueriesContext(connection) as five_subjects:
+            response = list_subjects()
+
+        assert len(response.data) == 5
+        assert len(five_subjects) == len(one_subject)
 
 
 @pytest.mark.django_db
@@ -145,14 +171,60 @@ class TestRetrieveSubject:
 
         assert set(response.data.keys()) == EXPECTED_KEYS
 
-    @pytest.mark.parametrize('code, label', LEVELS)
-    def test_if_subject_has_level_returns_code_and_label(self, retrieve_subject, code, label):
-        subject = make_subject(name='Physics', level=code)
+    def test_if_subject_has_old_level_fields_does_not_return_them(self, retrieve_subject):
+        subject = make_subject(name='Physics')
 
         response = retrieve_subject(subject.id)
 
-        assert response.data['level'] == code
-        assert response.data['level_display'] == label
+        assert 'level' not in response.data
+        assert 'level_display' not in response.data
+
+    def test_if_subject_has_one_level_returns_one_item_list(self, retrieve_subject):
+        subject = make_subject(name='Physics', levels=('university',))
+
+        response = retrieve_subject(subject.id)
+
+        assert response.data['levels'] == [{'code': 'university', 'name': 'University Level'}]
+
+    def test_if_subject_has_several_levels_returns_all_of_them(self, retrieve_subject):
+        subject = make_subject(name='Physics', levels=('o_level', 'a_level', 'university'))
+
+        response = retrieve_subject(subject.id)
+
+        assert response.data['levels'] == [
+            {'code': 'o_level', 'name': 'O Level'},
+            {'code': 'a_level', 'name': 'A Level'},
+            {'code': 'university', 'name': 'University Level'},
+        ]
+
+    def test_if_levels_were_added_out_of_order_returns_them_in_level_order(
+            self, retrieve_subject):
+        subject = baker.make(
+            Subject, name='Physics', price_40_min=Decimal('10.00'),
+            price_60_min=Decimal('15.00'))
+        for code in ('university', 'all_levels', 'a_level', 'o_level'):
+            subject.levels.add(Level.objects.get(code=code))
+
+        response = retrieve_subject(subject.id)
+
+        assert [level['code'] for level in response.data['levels']] == [
+            'o_level', 'a_level', 'all_levels', 'university']
+
+    def test_if_subject_has_levels_returns_objects_with_only_code_and_name(
+            self, retrieve_subject):
+        subject = make_subject(name='Physics', levels=('o_level', 'a_level'))
+
+        response = retrieve_subject(subject.id)
+
+        assert all(set(level.keys()) == {'code', 'name'} for level in response.data['levels'])
+
+    @pytest.mark.parametrize('code, name', LEVELS)
+    def test_if_subject_has_level_returns_its_code_and_name(self, retrieve_subject, code, name):
+        subject = make_subject(name='Physics', levels=(code,))
+
+        response = retrieve_subject(subject.id)
+
+        assert response.data['levels'] == [{'code': code, 'name': name}]
 
     def test_if_prices_differ_returns_each_in_the_right_field_as_decimal(self, retrieve_subject):
         subject = make_subject(
@@ -183,7 +255,7 @@ class TestWriteSubjectsIsNotAllowed:
 
         response = api_client.post('/subjects/', {
             'name': 'Chemistry',
-            'level': 'o_level',
+            'levels': ['o_level'],
             'price_40_min': '10.00',
             'price_60_min': '15.00',
         })
@@ -199,7 +271,7 @@ class TestWriteSubjectsIsNotAllowed:
 
         response = api_client.put(f'/subjects/{subject.id}/', {
             'name': 'Changed',
-            'level': 'university',
+            'levels': ['university'],
             'price_40_min': '99.00',
             'price_60_min': '99.00',
         })
@@ -208,6 +280,7 @@ class TestWriteSubjectsIsNotAllowed:
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         assert subject.name == 'Physics'
         assert subject.price_40_min == Decimal('10.00')
+        assert list(subject.levels.values_list('code', flat=True)) == ['o_level']
 
     @pytest.mark.parametrize('is_authenticated', [False, True])
     def test_if_method_is_patch_returns_405(self, api_client, authenticate, is_authenticated):
@@ -238,7 +311,6 @@ class TestSubjectModelRules:
     def build(self, **kwargs):
         data = {
             'name': 'Physics',
-            'level': 'o_level',
             'price_40_min': Decimal('10.00'),
             'price_60_min': Decimal('15.00'),
         }
@@ -246,12 +318,12 @@ class TestSubjectModelRules:
         return Subject(**data)
 
     def test_if_name_is_duplicate_raises_integrity_error(self):
-        make_subject(name='Physics', level='o_level')
+        make_subject(name='Physics', levels=('o_level',))
 
         with pytest.raises(IntegrityError):
             with transaction.atomic():
                 Subject.objects.create(
-                    name='Physics', level='university',
+                    name='Physics',
                     price_40_min=Decimal('5.00'), price_60_min=Decimal('8.00'))
 
         assert Subject.objects.filter(name='Physics').count() == 1
@@ -295,37 +367,32 @@ class TestSubjectModelRules:
         assert subject.price_40_min == Decimal('20.00')
         assert subject.price_60_min == Decimal('10.00')
 
-    @pytest.mark.parametrize('code, label', LEVELS)
-    def test_if_level_is_valid_is_accepted(self, code, label):
-        subject = self.build(level=code)
 
-        subject.full_clean()
-        subject.save()
+@pytest.mark.django_db
+class TestLevelRules:
+    def test_if_data_migration_ran_the_four_levels_exist_in_order(self):
+        levels = [(level.code, level.name) for level in Level.objects.all()]
 
-        assert Subject.objects.get(id=subject.id).get_level_display() == label
+        assert levels == LEVELS
 
-    def test_if_level_is_unknown_fails_full_clean(self):
-        subject = self.build(level='primary')
-
-        with pytest.raises(ValidationError) as error:
-            subject.full_clean()
-
-        assert 'level' in error.value.message_dict
-
-    def test_if_level_is_missing_fails_full_clean(self):
-        subject = Subject(
-            name='Physics', price_40_min=Decimal('10.00'), price_60_min=Decimal('15.00'))
-
-        with pytest.raises(ValidationError) as error:
-            subject.full_clean()
-
-        assert 'level' in error.value.message_dict
-
-    def test_if_level_is_unknown_and_saved_without_validation_raises_integrity_error(self):
-        subject = self.build(level='primary')
-
+    def test_if_level_code_is_duplicate_raises_integrity_error(self):
         with pytest.raises(IntegrityError):
             with transaction.atomic():
-                subject.save()
+                Level.objects.create(code='o_level', name='Another Name')
 
-        assert not Subject.objects.filter(name='Physics').exists()
+        assert Level.objects.filter(code='o_level').count() == 1
+
+    def test_if_level_name_is_duplicate_raises_integrity_error(self):
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                Level.objects.create(code='another_code', name='O Level')
+
+        assert Level.objects.filter(name='O Level').count() == 1
+
+    def test_if_two_subjects_share_a_level_both_are_linked_to_it(self):
+        physics = make_subject(name='Physics', levels=('o_level',))
+        biology = make_subject(name='Biology', levels=('o_level', 'a_level'))
+
+        o_level = Level.objects.get(code='o_level')
+
+        assert set(o_level.subjects.all()) == {physics, biology}

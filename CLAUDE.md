@@ -23,8 +23,8 @@ Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). 
    - A student can delete their own account, which deletes their Student.
 2. **Subjects** — each subject has two USD prices: one for a 40-minute class and one for a 60-minute class. Store prices in `DecimalField`, never `FloatField`. The API is read-only for subjects (list and retrieve); admins create and edit them in the Django admin site, so use `ReadOnlyModelViewSet` and register the model in `classes/admin.py`.
    - The subject routes are public: anyone can list and retrieve subjects without logging in.
-   - A subject has a name, a level and the two prices, nothing else.
-   - The level is the level the tutor teaches the subject at. Each subject has exactly one, chosen from four fixed values: `all_grades` (All Grades (1-O Level)), `o_level` (O Level), `o_a_level` (O/A Level) and `university` (University Level). The API returns the code as `level` and the label as `level_display`.
+   - A subject has a name, one or more levels and the two prices, nothing else.
+   - A level is a level the tutor teaches the subject at. There are four, created by a data migration: `o_level` (O Level), `a_level` (A Level), `all_levels` (All Levels (1-O Level)) and `university` (University Level). A subject has one or more of them, chosen in the Django admin. The API returns them as `levels`, a list of objects with `code` and `name`, in the order listed here.
    - The name is unique.
    - A price is zero or more: a negative price is rejected, a free subject (0.00) is allowed. The two prices are independent; neither has to be lower than the other.
 3. **Weekly class scheduling** — a user books a weekly recurring class by choosing subject, day of the week, time, and a duration of 40 or 60 minutes.
@@ -34,7 +34,7 @@ Only requirements 1, 2 and 3 are built so far (see Implemented vs Stub Routes). 
    - Reject the booking if an upcoming trial lesson (any student's) occupies that weekday and hour. A trial lesson whose date has passed no longer blocks the slot. Not built yet: it waits for trial lessons (requirement 4).
    - A weekly class belongs to a Student, not directly to the user. A logged-in user without a Student gets 403 on every `/classes/` route. Deleting the student deletes their classes.
    - The day of the week is a code, `monday` to `sunday`. The API returns the code as `day` and the label as `day_display`.
-   - A request sends `subject` as the subject's id; a response returns it as a nested object with `id`, `name`, `level` and `level_display`, and no prices.
+   - A request sends `subject` as the subject's id; a response returns it as a nested object with `id`, `name` and `levels` (the same list of `code` and `name` objects as `/subjects/`), and no prices.
    - A student can edit a weekly class (subject, day, time, duration) under the same rules as a new booking.
    - A subject that still has weekly classes cannot be deleted.
 4. **Trial lessons** — a user books a trial lesson by choosing a subject and a specific date and time. A trial lesson lasts 60 minutes, is free, and must start on the full hour like weekly classes.
@@ -121,7 +121,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
 - `core/` — custom user model, auth customisation and the registration signal that creates a user's `Student` profile.
-- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Subject` and `WeeklyClass` exist so far. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
+- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Level`, `Subject` and `WeeklyClass` exist so far. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
 ### Auth

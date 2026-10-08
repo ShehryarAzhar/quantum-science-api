@@ -7,7 +7,7 @@ from .serializers import SubjectSerializer, WeeklyClassSerializer
 
 
 class SubjectViewSet(ReadOnlyModelViewSet):
-    queryset = Subject.objects.all()
+    queryset = Subject.objects.prefetch_related("levels")
     serializer_class = SubjectSerializer
     permission_classes = [AllowAny]
 
@@ -20,6 +20,7 @@ class WeeklyClassViewSet(ModelViewSet):
         return (
             WeeklyClass.objects.filter(student=self.request.user.student)
             .select_related("subject")
+            .prefetch_related("subject__levels")
             .in_week_order()
         )
 

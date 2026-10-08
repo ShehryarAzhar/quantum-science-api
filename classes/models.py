@@ -32,18 +32,21 @@ class Student(models.Model):
         return self.user.get_username()
 
 
-class SubjectLevel(models.TextChoices):
-    ALL_GRADES = "all_grades", "All Grades (1-O Level)"
-    O_LEVEL = "o_level", "O Level"
-    O_A_LEVEL = "o_a_level", "O/A Level"
-    UNIVERSITY = "university", "University Level"
+class Level(models.Model):
+    code = models.SlugField(max_length=20, unique=True)
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+        # The order the data migration creates the levels in.
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.name
 
 
 class Subject(models.Model):
-    Level = SubjectLevel
-
     name = models.CharField(max_length=100, unique=True)
-    level = models.CharField(max_length=20, choices=SubjectLevel.choices)
+    levels = models.ManyToManyField(Level, related_name="subjects")
     price_40_min = models.DecimalField(
         max_digits=6,
         decimal_places=2,
@@ -58,10 +61,6 @@ class Subject(models.Model):
     class Meta:
         ordering = ["name"]
         constraints = [
-            models.CheckConstraint(
-                condition=models.Q(level__in=SubjectLevel.values),
-                name="subject_level_valid",
-            ),
             models.CheckConstraint(
                 condition=models.Q(price_40_min__gte=0),
                 name="subject_price_40_min_gte_0",
