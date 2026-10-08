@@ -61,7 +61,8 @@ Only requirements 1, 2, 3 and 4 are built so far (see Implemented vs Stub Routes
 - Scope every booking queryset to `request.user`; a student must never see or modify another student's classes or trial lessons. Timeslot clash checks are the exception: they must look at every user's bookings.
 - Prefer `ModelViewSet` registered on a DRF router. When an endpoint does not map onto a model's CRUD (e.g. my schedule, which aggregates and totals), use whatever fits best (`APIView`, a generic view, or a viewset `@action`).
 - Enforce booking rules (full hour, no timeslot clash) on the server in serializers/models, backed by a database constraint where possible; do not rely on the frontend.
-- Every date and time in the API is UTC. The server stores, compares and returns UTC; the frontend converts to and from the student's local time.
+- Every date and time in the database and the API is UTC. The server stores, compares and returns UTC; the frontend converts to and from the student's local time. Do not change `TIME_ZONE` or `USE_TZ`: DRF reads them.
+- The Django admin is the one exception: it shows and accepts Asia/Karachi (`ADMIN_TIME_ZONE` in settings), while still storing UTC. Architecture > Admin timezone describes how. Never call `timezone.activate()` without restoring the previous timezone (use `timezone.override()`): a timezone left active on a worker thread would leak into the next API response.
 
 ## Feature workflow
 
@@ -110,7 +111,7 @@ No linter or formatter is configured.
 
 ## Environment
 
-Settings load `.env` from the repo root via `python-dotenv`. Copy `.env.example` to `.env` and set `DB_NAME`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`. A running MySQL server is required for the dev server, migrations, and any test that touches the database (pytest-django creates a `test_<DB_NAME>` database, so the MySQL user needs permission to create databases).
+Settings load `.env` from the repo root via `python-dotenv`. Copy `.env.example` to `.env` and set `DB_NAME`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`. A running MySQL server is required for the dev server, migrations, and any test that touches the database (pytest-django creates a `test_<DB_NAME>` database, so the MySQL user needs permission to create databases). MySQL's timezone tables are not required and are not assumed to be loaded: do not use anything that makes the database convert between named timezones outside UTC (e.g. `date_hierarchy` in the admin, or a `__date` / `__hour` lookup on a datetime while a non-UTC timezone is active).
 
 ## Testing
 
@@ -130,7 +131,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 ## Architecture
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
-- `core/` — custom user model, auth customisation and the registration signal that creates a user's `Student` profile.
+- `core/` — custom user model, auth customisation, the registration signal that creates a user's `Student` profile, and `core/middleware.py`, which runs the Django admin in Asia/Karachi (see Admin timezone).
 - `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; `Student`, `Level`, `Subject`, `WeeklyClass` and `TrialLesson` exist so far. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403, and `IsTrialLessonOpen`, the object-level permission that answers 403 when a locked trial lesson is edited or deleted. The rules that compare a weekly class with a trial lesson (`weekly_class_clash_error`, `trial_lesson_clash_error`) live in `classes/models.py`, shared by the models' `clean()` and the serializers. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
@@ -156,6 +157,18 @@ Authentication is entirely delegated to Djoser + SimpleJWT; there are no hand-wr
 `REST_FRAMEWORK` sets only the default authentication class (JWT). No default permission class is set, so DRF's `AllowAny` default applies — new views must declare their own `permission_classes`.
 
 Email uses the console backend, so Djoser emails (activation, password reset) print to the dev server's stdout.
+
+### Admin timezone
+
+The database and the API are UTC; the Django admin shows and accepts Asia/Karachi (PKT). Nothing about this is stored: there is no schema change behind it.
+
+- `ADMIN_TIME_ZONE = "Asia/Karachi"` in `config/settings.py` names the admin's timezone. `TIME_ZONE` stays `"UTC"`.
+- `core.middleware.AdminTimezoneMiddleware` (last in `MIDDLEWARE`) wraps every request whose path starts with the admin URL prefix (`reverse("admin:index")`) in `timezone.override(...)` and does nothing for any other request, so API responses, including the browsable API, stay UTC.
+- With that timezone active Django converts datetimes in the admin itself: a trial lesson's `starts_at` is listed, entered and filtered in PKT and saved as UTC.
+- A weekly class's `day` + `time` is not a datetime, so Django cannot convert it. `slot_in_zone(day, time, tz)` (UTC to a timezone) and `slot_to_utc(day, time, tz)` (back) in `classes/models.py` do it, rolling the day over and wrapping the week (Monday 21:00 UTC is Tuesday 02:00 PKT; Monday 03:00 PKT is Sunday 22:00 UTC). They move the whole time, hours and minutes, by the zone's own current offset; nothing hard-codes +5.
+- `classes/admin.py` uses them for weekly classes: `WeeklyClassAdminForm` opens a class in PKT and converts what the admin typed to UTC in `clean()`, before model validation, so the full-hour, clash and trial lesson rules run on the UTC values; the list shows "Day (PKT)" and "Time (PKT)" columns; `WeeklyClassQuerySet.with_week_minute(tz)` annotates the minute of the week in that timezone, which the list is ordered by and `WeeklyClassDayFilter` filters on.
+- `WeeklyClass.__str__` and `TrialLesson.__str__` use the active timezone, so a booking's name reads in PKT inside the admin and in UTC everywhere else.
+- `TrialLessonAdmin` has no `date_hierarchy`: outside UTC it needs MySQL's timezone tables, which are not loaded (see Environment). It has a `starts_at` date filter instead.
 
 ## Claude Code tooling
 

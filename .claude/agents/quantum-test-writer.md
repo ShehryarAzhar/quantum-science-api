@@ -123,7 +123,7 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a subject that has weekly classes cannot be deleted (`ProtectedError`)
   - a slot occupied by an upcoming trial lesson (any student's) is rejected, on `POST`, `PUT` and `PATCH`, with the error under `non_field_errors`
   - a trial lesson whose start time has passed does not block the slot
-  - `day` and `time` are UTC
+  - `day` and `time` are UTC in the database and the API. Only the Django admin shows and accepts them in Asia/Karachi (`WeeklyClassAdminForm`, tested in `classes/tests/test_weekly_class_admin.py`); API tests always send and expect UTC
 - **Trial lessons**:
   - the date and time are one field, `starts_at`, an ISO 8601 date-time returned in UTC (`"2026-10-13T02:00:00Z"`); build test times relative to `timezone.now()`, rounded to a full hour, never hard-coded dates
   - a time that is not on the full hour is rejected, under `starts_at`
