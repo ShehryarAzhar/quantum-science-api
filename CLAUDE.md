@@ -12,7 +12,7 @@ Django 6.1 + Django REST Framework API on Python 3.14, backed by MySQL. Dependen
 
 ## Product requirements
 
-Only requirement 1 is built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
+Only requirements 1 and 2 are built so far (see Implemented vs Stub Routes). The numbering 1–5 matches the spec numbers (requirement 2 is `.claude/specs/02-subjects.md`) and is referenced by the slash commands ("Product requirements 4"), so keep it stable.
 
 1. **Users and student profile** — a user registers with username, email, password, first and last name and a phone number, and logs in with a JWT. Auth is delegated to Djoser + SimpleJWT; Architecture > Auth describes how it is built.
    - Email is unique.
@@ -22,6 +22,11 @@ Only requirement 1 is built so far (see Implemented vs Stub Routes). The numberi
    - A student can read their own details, including the phone number, at `/auth/users/me/`, and edit their email, first name and last name there. Username and phone number cannot be changed through the API; the phone number is edited in the Django admin.
    - A student can delete their own account, which deletes their Student.
 2. **Subjects** — each subject has two USD prices: one for a 40-minute class and one for a 60-minute class. Store prices in `DecimalField`, never `FloatField`. The API is read-only for subjects (list and retrieve); admins create and edit them in the Django admin site, so use `ReadOnlyModelViewSet` and register the model in `classes/admin.py`.
+   - The subject routes are public: anyone can list and retrieve subjects without logging in.
+   - A subject has a name, a level and the two prices, nothing else.
+   - The level is the level the tutor teaches the subject at. Each subject has exactly one, chosen from four fixed values: `all_grades` (All Grades (1-O Level)), `o_level` (O Level), `o_a_level` (O/A Level) and `university` (University Level). The API returns the code as `level` and the label as `level_display`.
+   - The name is unique.
+   - A price is zero or more: a negative price is rejected, a free subject (0.00) is allowed. The two prices are independent; neither has to be lower than the other.
 3. **Weekly class scheduling** — a user books a weekly recurring class by choosing subject, day of the week, time, and a duration of 40 or 60 minutes.
    - A user may book several classes of the same subject in one week.
    - Two classes cannot be booked in the same timeslot. This is enforced across all users, not per student: once any student holds a weekday + hour slot, nobody else can book it.
@@ -111,7 +116,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
 - `core/` — custom user model, auth customisation and the registration signal that creates a user's `Student` profile.
-- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; only `Student` exists so far.
+- `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; only `Student` and `Subject` exist so far. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix); later features register on the same router.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
 ### Auth
@@ -186,12 +191,12 @@ Only student-facing routes are listed. `admin/` (Django admin site) is not part 
 
 ### Subjects
 
-Read-only by design; subjects are managed in the Django admin.
+Read-only by design; subjects are managed in the Django admin. Both routes are public.
 
 | Method | Path | Status |
 | --- | --- | --- |
-| GET | `/subjects/` | Stub |
-| GET | `/subjects/{id}/` | Stub |
+| GET | `/subjects/` | Implemented |
+| GET | `/subjects/{id}/` | Implemented |
 
 ### Weekly classes
 

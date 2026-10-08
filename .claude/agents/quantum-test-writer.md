@@ -106,7 +106,7 @@ For every feature, systematically cover whichever of these apply:
 **Deferred rules**: a spec file's "Deferred rules" section lists rules that are not implemented yet because they depend on a feature that does not exist (e.g., the trial lesson clash check on weekly classes before trial lessons are built). Do not write tests for a rule the spec defers to a later spec. Do write tests for a rule that an earlier spec deferred to the feature under test, adding them to the test file of the feature the rule belongs to.
 
 Feature-specific rules from the product requirements (skip any that the feature's spec file defers):
-- **Subjects**: list and retrieve work; POST, PUT, PATCH and DELETE return 405; both prices are returned as decimals
+- **Subjects**: list and retrieve work; POST, PUT, PATCH and DELETE return 405; both prices are returned as decimals; the level is returned as its code (`level`) and its label (`level_display`)
 - **Weekly classes**:
   - a time that is not on the full hour is rejected
   - a duration other than 40 or 60 is rejected
