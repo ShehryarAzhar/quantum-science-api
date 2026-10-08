@@ -38,13 +38,13 @@ The level of a weekly class, added after the feature was first built (a subject 
 Choices of this spec that are not product rules:
 
 13. Any full hour of the day, 00:00 to 23:00, is bookable; `CLAUDE.md` sets no teaching hours.
-14. `time` is a wall-clock time with no timezone attached and is stored and returned as given.
+14. `time` has no timezone attached and is stored and returned as given. It is read as UTC, like `day` (user decision, `.claude/specs/04-trial-lessons.md`, Requirements 17); the frontend converts to and from the student's local time.
 15. A student can edit a weekly class (`PUT` / `PATCH`): subject, level, day, time and duration can all change, under the same rules as a new booking. A class does not clash with itself.
 16. `GET /classes/` is ordered Monday to Sunday, then by time.
 
 ## Deferred rules
 Deferred to a later spec:
-- **Trial lesson clash** (Product requirements 3: reject the booking if an upcoming trial lesson, any student's, occupies that weekday and hour; a past trial lesson no longer blocks) — there is no trial lesson model yet. `.claude/specs/04-trial-lessons.md` must add this check to the weekly class serializer, for both create and update, along with the decision of which timezone a trial lesson's date and time are read in when compared to a weekly class's `day` and `time`.
+- **Trial lesson clash** (Product requirements 3: reject the booking if an upcoming trial lesson, any student's, occupies that weekday and hour; a past trial lesson no longer blocks) — there is no trial lesson model yet. `.claude/specs/04-trial-lessons.md` must add this check to the weekly class serializer, for both create and update, along with the decision of which timezone a trial lesson's date and time are read in when compared to a weekly class's `day` and `time`. **Picked up and implemented by `.claude/specs/04-trial-lessons.md`**: the check is in `WeeklyClassSerializer.validate()` and `WeeklyClass.clean()`, and the timezone is UTC.
 - **Weekly cost** (Product requirements 5) — pricing each class by its own duration and totalling them belongs to `.claude/specs/05-schedule.md`. This feature stores `duration` and the subject but returns no price.
 
 Picked up from an earlier spec:

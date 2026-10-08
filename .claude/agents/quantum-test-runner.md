@@ -147,7 +147,9 @@ Always check test output for signals of these common mistakes (a signal tied to 
 - A time that is not on the full hour is accepted → the full-hour rule is missing on the server
 - A past trial lesson blocks a weekly class slot → only upcoming trial lessons should block
 - `completed` can be changed through the API → the field must be read-only there
-- A locked trial lesson (completed or past) can be edited or deleted, or a second trial lesson can be created → locking or the one-per-student rule is missing
+- A trial lesson is accepted on the weekday and hour of a weekly class, or in the past → the weekly class clash check or the past-booking rule is missing
+- A locked trial lesson (completed or past) can be edited or deleted instead of returning 403, or a second trial lesson can be created → locking or the one-per-student rule is missing
+- A trial lesson is accepted with a level its subject does not have → the level check is missing on that write
 - Prices come back as floats or lose precision → `FloatField` used instead of `DecimalField`
 - Subjects accept POST, PUT, PATCH or DELETE → the viewset must be a `ReadOnlyModelViewSet`
 - The weekly total is wrong → each class must be priced by its own duration, and trial lessons add nothing

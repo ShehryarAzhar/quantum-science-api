@@ -125,7 +125,7 @@ There is no serializer `validate` method and no API error payload for these rule
 
 `classes/admin.py` also registers `Level` (`LevelAdmin`): `list_display` name and code, `search_fields` name. The four levels come from the data migration; an admin can rename one or add another there. Deleting a level removes it from its subjects, which can leave a subject with none; a level that weekly classes use cannot be deleted at all (`PROTECT`, see `.claude/specs/03-weekly-classes.md`).
 
-`SubjectAdmin` uses `SubjectAdminForm`, which refuses to remove a level from a subject while weekly classes of that subject use it (`.claude/specs/03-weekly-classes.md`, Requirements 21).
+`SubjectAdmin` uses `SubjectAdminForm`, which refuses to remove a level from a subject while weekly classes of that subject use it (`.claude/specs/03-weekly-classes.md`, Requirements 21) or trial lessons of that subject use it (`.claude/specs/04-trial-lessons.md`, Requirements 16). A subject or a level that a trial lesson uses cannot be deleted either (`PROTECT`).
 
 Admin-only: creating a subject, editing its name, levels or prices, and deleting it. None of these is possible through the API.
 

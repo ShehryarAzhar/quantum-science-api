@@ -121,16 +121,24 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a level used by a weekly class cannot be deleted (`ProtectedError`), and the subject admin form refuses to remove a level its weekly classes use
   - a class can be edited with `PUT` / `PATCH` under the same rules, and does not clash with itself
   - a subject that has weekly classes cannot be deleted (`ProtectedError`)
-  - a slot occupied by an upcoming trial lesson (any student's) is rejected
-  - a trial lesson whose date has passed does not block the slot
+  - a slot occupied by an upcoming trial lesson (any student's) is rejected, on `POST`, `PUT` and `PATCH`, with the error under `non_field_errors`
+  - a trial lesson whose start time has passed does not block the slot
+  - `day` and `time` are UTC
 - **Trial lessons**:
-  - a time that is not on the full hour is rejected
-  - a second trial lesson for the same student is rejected
+  - the date and time are one field, `starts_at`, an ISO 8601 date-time returned in UTC (`"2026-10-13T02:00:00Z"`); build test times relative to `timezone.now()`, rounded to a full hour, never hard-coded dates
+  - a time that is not on the full hour is rejected, under `starts_at`
+  - a `starts_at` in the past is rejected, under `starts_at`; create a past or completed lesson directly with `baker.make`
+  - a lesson belongs to a Student: a logged-in user without a Student gets 403 on every `/trial-lessons/` route
+  - `subject` is sent as an id and returned as a nested object with `id`, `name` and `levels`, and no prices
+  - a lesson has one required `level`, sent as the level's code and returned as an object with `code` and `name`; it must be one of the subject's levels on `POST`, `PUT` and `PATCH`, with the error always under `level`
+  - every trial lesson a test builds needs a level that its subject has
+  - a second trial lesson for the same student is rejected with 400 under `non_field_errors`, whether the first is open, completed or past
   - `completed` cannot be set or changed through the API
   - while not completed and not past, the student can edit and delete it; deleting it allows booking another
-  - once completed or past, edit and delete are rejected, it stays readable, and a new one still cannot be created
-  - a time occupied by any student's weekly class (same weekday and hour) is rejected
-  - a time occupied by any student's trial lesson is rejected
+  - once completed or past, `PUT`, `PATCH` and `DELETE` return 403 (even with an invalid body), it stays readable, and a new one still cannot be created
+  - a time occupied by any student's weekly class (same weekday and hour, in UTC) is rejected, under `starts_at`
+  - a time occupied by any student's trial lesson is rejected, under `starts_at`
+  - a subject or a level that a trial lesson uses cannot be deleted (`ProtectedError`), and the subject admin form refuses to remove a level its trial lessons use
 - **My schedule**:
   - returns only the logged-in student's classes and trial lesson
   - the weekly total is the sum of each weekly class priced by its own duration (40-minute or 60-minute price)
