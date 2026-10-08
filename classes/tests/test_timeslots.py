@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from classes.models import DayOfWeek, slot_in_zone, slot_to_utc
+from classes.timeslots import DayOfWeek, slot_in_zone, slot_to_utc
 
 KARACHI = ZoneInfo("Asia/Karachi")
 KOLKATA = ZoneInfo("Asia/Kolkata")

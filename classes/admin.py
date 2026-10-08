@@ -6,16 +6,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.db.models import Count
 
-from .models import (
-    MINUTES_PER_DAY,
-    Level,
-    Student,
-    Subject,
-    TrialLesson,
-    WeeklyClass,
-    slot_in_zone,
-    slot_to_utc,
-)
+from .models import Level, Student, Subject, TrialLesson, WeeklyClass
+from .timeslots import MINUTES_PER_DAY, slot_in_zone, slot_to_utc
 
 # The admin shows and accepts this timezone; the database and the API are
 # UTC. core.middleware.AdminTimezoneMiddleware activates it, which converts

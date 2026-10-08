@@ -11,14 +11,8 @@ from model_bakery import baker
 from rest_framework import status
 
 from classes.admin import SubjectAdminForm
-from classes.models import (
-    DayOfWeek,
-    Level,
-    Student,
-    Subject,
-    TrialLesson,
-    WeeklyClass,
-)
+from classes.models import Level, Student, Subject, TrialLesson, WeeklyClass
+from classes.timeslots import DayOfWeek
 
 SUBJECT_KEYS = {"id", "name", "levels"}
 LEVEL_KEYS = {"code", "name"}

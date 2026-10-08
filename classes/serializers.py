@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
 
-from .models import (
+from .constants import (
     FULL_HOUR_MESSAGE,
     STARTS_AT_IN_PAST_MESSAGE,
     TIMESLOT_CONSTRAINT_NAME,
@@ -11,15 +11,14 @@ from .models import (
     TRIAL_LESSON_ALREADY_BOOKED_MESSAGE,
     TRIAL_LESSON_FULL_HOUR_CONSTRAINT_NAME,
     TRIAL_LESSON_TIMESLOT_CONSTRAINT_NAME,
-    Level,
-    Subject,
-    TrialLesson,
-    WeeklyClass,
+)
+from .models import Level, Subject, TrialLesson, WeeklyClass
+from .rules import (
     level_not_in_subject_error,
     trial_lesson_clash_error,
-    validate_full_hour,
     weekly_class_clash_error,
 )
+from .validators import validate_full_hour
 
 
 class LevelSerializer(serializers.ModelSerializer):

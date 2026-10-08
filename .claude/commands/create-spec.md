@@ -67,7 +67,9 @@ Read these before writing the spec:
   apps, DRF settings, mounted routes
 - `pyproject.toml` — installed dependencies
 - In `classes/` and `core/`, whichever of these exist:
-  `models.py`, `serializers.py`, `views.py`, `urls.py`,
+  `models.py`, `constants.py`, `validators.py`,
+  `timeslots.py`, `querysets.py`, `rules.py`,
+  `serializers.py`, `views.py`, `urls.py`,
   `admin.py`, and the files in `migrations/`
 - All files in `.claude/specs/` — avoid duplicating
   existing specs and pick up any rule an earlier spec
