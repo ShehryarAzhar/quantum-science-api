@@ -1,4 +1,5 @@
 import datetime
+import itertools
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -24,9 +25,15 @@ def t(hour, minute=0):
     return datetime.time(hour, minute)
 
 
+SLUG_COUNTER = itertools.count(1)
+
+
 def make_subject():
     subject = baker.make(
-        Subject, price_40_min=Decimal("10.00"), price_60_min=Decimal("15.00")
+        Subject,
+        price_40_min=Decimal("10.00"),
+        price_60_min=Decimal("15.00"),
+        slug=f"subject-{next(SLUG_COUNTER)}",
     )
     subject.levels.set([Level.objects.get(code="o_level")])
     return subject

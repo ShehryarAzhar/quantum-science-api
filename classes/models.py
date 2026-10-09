@@ -21,7 +21,11 @@ from .rules import (
     weekly_class_clash_error,
 )
 from .timeslots import DayOfWeek, slot_in_zone
-from .validators import phone_number_validator, validate_full_hour
+from .validators import (
+    phone_number_validator,
+    subject_slug_validator,
+    validate_full_hour,
+)
 
 
 class Student(models.Model):
@@ -53,6 +57,13 @@ class Level(models.Model):
 
 class Subject(models.Model):
     name = models.CharField(max_length=100, unique=True)
+    # The subject's public URL on the frontend: never rebuilt from the name.
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        validators=[subject_slug_validator],
+    )
+    description = models.TextField(blank=True)
     levels = models.ManyToManyField(Level, related_name="subjects")
     price_40_min = models.DecimalField(
         max_digits=6,

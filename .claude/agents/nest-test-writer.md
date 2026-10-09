@@ -107,7 +107,7 @@ For every feature, systematically cover whichever of these apply:
 **Deferred rules**: a spec file's "Deferred rules" section lists rules that are not implemented yet because they depend on a feature that does not exist (e.g., the trial lesson clash check on weekly classes before trial lessons are built). Do not write tests for a rule the spec defers to a later spec. Do write tests for a rule that an earlier spec deferred to the feature under test, adding them to the test file of the feature the rule belongs to.
 
 Feature-specific rules from the product requirements (skip any that the feature's spec file defers):
-- **Subjects**: list and retrieve work; POST, PUT, PATCH and DELETE return 405; both prices are returned as decimals; a subject has one or more levels, returned as `levels`, a list of objects with `code` and `name`. The four `Level` rows (`o_level`, `a_level`, `all_levels`, `university`) are created by a data migration and already exist in the test database: fetch them with `Level.objects.get(code=...)` instead of creating them
+- **Subjects**: list and retrieve work; one subject is retrieved by its slug, `/subjects/{slug}/`, and an unknown slug or the numeric id is a 404; POST, PUT, PATCH and DELETE return 405; a subject returns `id`, `name`, `slug`, `description`, `levels`, `price_40_min` and `price_60_min`; the slug is required and unique, lowercase letters, digits and single hyphens (`full_clean()` rejects capitals, underscores and a leading, trailing or double hyphen), so give every subject a test builds its own slug; the description may be blank; both prices are returned as decimals; a subject has one or more levels, returned as `levels`, a list of objects with `code` and `name`. The four `Level` rows (`o_level`, `a_level`, `all_levels`, `university`) are created by a data migration and already exist in the test database: fetch them with `Level.objects.get(code=...)` instead of creating them
 - **Weekly classes**:
   - a time that is not on the full hour is rejected
   - a duration other than 40 or 60 is rejected
@@ -115,7 +115,7 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a weekday + hour slot held by *any* student is rejected for everyone
   - a class belongs to a Student: a logged-in user without a Student gets 403 on every `/classes/` route
   - the day is a code, `monday` to `sunday` (`day`), returned with its label (`day_display`)
-  - `subject` is sent as an id and returned as a nested object with `id`, `name` and `levels` (a list of objects with `code` and `name`), and no prices
+  - `subject` is sent as an id and returned as a nested object with `id`, `name`, `slug` and `levels` (a list of objects with `code` and `name`), and no prices or description
   - a class has one required `level`, sent as the level's code (`"a_level"`) and returned as an object with `code` and `name`
   - the level must be one of the subject's levels, on `POST`, `PUT` and `PATCH`; a `PATCH` of only the subject checks the class's current level, a `PATCH` of only the level checks the class's current subject; the error is always under `level`
   - every weekly class a test builds needs a level that its subject has: give test subjects their levels explicitly and fetch levels with `Level.objects.get(code=...)`
@@ -130,7 +130,7 @@ Feature-specific rules from the product requirements (skip any that the feature'
   - a time that is not on the full hour is rejected, under `starts_at`
   - a `starts_at` in the past is rejected, under `starts_at`; create a past or completed lesson directly with `baker.make`
   - a lesson belongs to a Student: a logged-in user without a Student gets 403 on every `/trial-lessons/` route
-  - `subject` is sent as an id and returned as a nested object with `id`, `name` and `levels`, and no prices
+  - `subject` is sent as an id and returned as a nested object with `id`, `name`, `slug` and `levels`, and no prices or description
   - a lesson has one required `level`, sent as the level's code and returned as an object with `code` and `name`; it must be one of the subject's levels on `POST`, `PUT` and `PATCH`, with the error always under `level`
   - every trial lesson a test builds needs a level that its subject has
   - a second trial lesson for the same student is rejected with 400 under `non_field_errors`, whether the first is open, completed or past

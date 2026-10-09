@@ -1,13 +1,13 @@
 # Spec: Subjects
 
 ## Overview
-A subject is what a student books a class in, and it carries the two prices the rest of the domain is built on: one for a 40-minute class and one for a 60-minute class. It also states the levels the tutor teaches it at; a subject can have several. This feature adds the `Level` and `Subject` models, registers them in the Django admin, where admins create and edit subjects, and exposes a read-only API so the frontend can list subjects and their prices. It is built second, straight after users, because weekly classes and trial lessons both point at a subject and the schedule's weekly cost is a sum of subject prices: none of them can be built without it.
+A subject is what a student books a class in, and it carries the two prices the rest of the domain is built on: one for a 40-minute class and one for a 60-minute class. It also states the levels the tutor teaches it at; a subject can have several. A subject also has a slug, its public URL on the frontend, and a plain-text description, so each subject can have its own search-friendly page. This feature adds the `Level` and `Subject` models, registers them in the Django admin, where admins create and edit subjects, and exposes a read-only API so the frontend can list subjects and their prices. It is built second, straight after users, because weekly classes and trial lessons both point at a subject and the schedule's weekly cost is a sum of subject prices: none of them can be built without it.
 
 ## Depends on
 No feature dependencies. `Subject` does not reference the user or the Student, and its routes are public, so it does not rely on `.claude/specs/01-users.md` beyond the project setup that feature left in place (the `classes` app, DRF and its settings).
 
 ## Requirements
-1. A subject has a name, one or more levels and two prices in USD: the price of a 40-minute class and the price of a 60-minute class.
+1. A subject has a name, a slug, a description, one or more levels and two prices in USD: the price of a 40-minute class and the price of a 60-minute class.
 2. Both prices are stored in `DecimalField`, never `FloatField`.
 3. The API is read-only for subjects: a subject can be listed and retrieved, and nothing else. `POST`, `PUT`, `PATCH` and `DELETE` are not allowed and return 405.
 4. Subjects are created, edited and deleted only in the Django admin site, so the model is registered in `classes/admin.py`.
@@ -16,7 +16,7 @@ No feature dependencies. `Subject` does not reference the user or the Student, a
 Decisions the user made on points `CLAUDE.md` leaves open:
 
 6. **Access** — both routes are public (`AllowAny`). An anonymous request gets 200, so the frontend can show subjects and prices before a student registers. A logged-in student gets the same response.
-7. **Fields** — a subject has a name, its levels and the two prices and nothing else: no description and no active flag.
+7. **Fields** — a subject has a name, a slug, a description, its levels and the two prices and nothing else: no active flag.
 8. **Name** — the name is unique. A second subject with an existing name is rejected in the admin.
 9. **Lowest price** — a price is zero or more. A negative price is rejected; a free subject (0.00) is allowed. The 40-minute and the 60-minute price are independent: neither has to be lower than the other.
 10. **Levels** — a level is a level the tutor teaches the subject at. A subject has one or more levels, chosen in the Django admin. There are four levels, which exist in every environment because a data migration creates them:
@@ -32,6 +32,12 @@ Decisions the user made on points `CLAUDE.md` leaves open:
 11. **Levels in the API** — the API returns `levels`, a list with one object per level of the subject. Each object has the level's `code` and `name`, e.g. `"levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]`. The levels of a subject come in the order of the table above.
 12. **Replacing the single level** — a subject used to have exactly one level, stored as a text code. Subjects that existed before the change keep it as one of their levels: `o_level` and `university` map to the level with the same code, `all_grades` ("All Grades (1-O Level)") to `all_levels`, and `o_a_level` ("O/A Level"), which no longer exists, to both `o_level` and `a_level`.
 
+13. **Slug** — the slug is the subject's public URL on the frontend (e.g. `/subjects/chemistry`). It is required and unique. It is made of lowercase letters and digits, in groups separated by single hyphens: `chemistry` and `a-level-maths` are accepted; `Chemistry`, `chem_101`, `-chem`, `chem-` and `chem--101` are rejected. This is stricter than Django's `SlugField`, which also takes capitals and underscores.
+14. **Stable slug** — renaming a subject does not change its slug. The slug is never regenerated from the name on save: no `save()` override, signal or serializer derives it. The Django admin prefills it from the name while a subject is being added (`prepopulated_fields`); on the edit form it stays as it is unless the admin changes it by hand.
+15. **Description** — plain text, which may be blank. It is stored as typed: no HTML and no Markdown processing. The frontend renders it as plain paragraphs, never as HTML. It is edited in the Django admin in a multi-line box.
+16. **Retrieve by slug** — one subject is retrieved by its slug, `GET /subjects/{slug}/`, in place of the numeric id. An unknown slug is a 404, and so is the numeric id (`/subjects/3/`), unless a subject has that slug. `id` is still returned in every subject response, because bookings send `subject` as the id.
+17. **Existing subjects** — the database held no subjects when the two fields were added, so no data migration fills slugs. A plain schema migration is enough.
+
 ## Deferred rules
 No rule of this feature is deferred, and `.claude/specs/01-users.md` deferred nothing to it.
 
@@ -42,9 +48,9 @@ Later specs build on `Subject` and own these decisions, which are not made here:
 
 ## Routes
 - `GET /subjects/` — list every subject, ordered by name — public
-- `GET /subjects/{id}/` — retrieve one subject; 404 if the id does not exist — public
+- `GET /subjects/{slug}/` — retrieve one subject by its slug; 404 if no subject has that slug — public
 
-No other method is routed: `POST /subjects/` and `PUT` / `PATCH` / `DELETE /subjects/{id}/` return 405 for anonymous and authenticated requests alike.
+No other method is routed: `POST /subjects/` and `PUT` / `PATCH` / `DELETE /subjects/{slug}/` return 405 for anonymous and authenticated requests alike.
 
 ## Models and database changes
 `classes.Level` (in `classes/models.py`, above `Subject`):
@@ -57,6 +63,8 @@ A model, not an array column, because MySQL has no `ArrayField`.
 
 `classes.Subject` (in `classes/models.py` next to `Student`):
 - `name` — `CharField(max_length=100, unique=True)`, required.
+- `slug` — `SlugField(max_length=100, unique=True, validators=[subject_slug_validator])`, required. `subject_slug_validator` is a `RegexValidator` in `classes/validators.py` (`^[a-z0-9]+(?:-[a-z0-9]+)*\Z`); it runs beside `SlugField`'s own validator.
+- `description` — `TextField(blank=True)`.
 - `levels` — `ManyToManyField(Level, related_name="subjects")`. Not `blank`, so a form requires at least one.
 - `price_40_min` — `DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(Decimal("0"))])`, required. USD price of one 40-minute class.
 - `price_60_min` — the same field definition. USD price of one 60-minute class.
@@ -66,7 +74,7 @@ A model, not an array column, because MySQL has no `ArrayField`.
   - `CheckConstraint(condition=Q(price_60_min__gte=0), name="subject_price_60_min_gte_0")`
 - `__str__` returns the name.
 
-The uniqueness of `name` is a database constraint (`unique=True`). `max_length=100` and `max_digits=6` (prices up to 9999.99) are sizing choices of this spec, not product rules.
+The uniqueness of `name` and of `slug` is a database constraint (`unique=True`). The slug's format is a validator only, so it is checked by the admin form and `full_clean()`, not by the database. `max_length=100` (name and slug) and `max_digits=6` (prices up to 9999.99) are sizing choices of this spec, not product rules.
 
 `Student` and `core.User` are unchanged. There is no relation between `Subject` and either of them.
 
@@ -77,6 +85,7 @@ Migrations:
 - `classes/migrations/0004_level_subject_levels.py` — creates `Level` and adds `Subject.levels`. Generated.
 - `classes/migrations/0005_seed_levels.py` — the data migration, written by hand. It removes the `subject_level_valid` constraint, creates the four levels in the order of Requirements 10 with `get_or_create` on `code`, and gives every existing subject the levels its old code maps to (Requirements 12). It uses the historical models from `apps.get_model`. Unapplying it writes one old code back per subject, which is lossy for a subject with several levels; a subject with no level, or only levels added later, gets `all_grades`.
 - `classes/migrations/0006_remove_subject_level.py` — drops the old `level` column. Generated.
+- `classes/migrations/0011_subject_description_subject_slug.py` — adds `description` and `slug`. Generated. The slug's one-off default is `''`, which is only safe on a table with at most one row; the table was empty (Requirements 17).
 
 Schema migrations are generated with `uv run python manage.py makemigrations classes`, never written by hand.
 
@@ -85,7 +94,7 @@ Schema migrations are generated with `uv run python manage.py makemigrations cla
 - Fields: `code`, `name`. No `id`. Used only nested, for output.
 
 `classes.serializers.SubjectSerializer` (`ModelSerializer`, in `classes/serializers.py`):
-- Fields: `id`, `name`, `levels`, `price_40_min`, `price_60_min`.
+- Fields: `id`, `name`, `slug`, `description`, `levels`, `price_40_min`, `price_60_min`.
 - `levels` is a declared `LevelSerializer(many=True, read_only=True)`: a list of `{"code", "name"}` objects, in `Level` order. There is no `level` or `level_display` field.
 - The API never writes a subject, so the serializer is only used for output and no field is writable through any route.
 - Prices are serialized as JSON numbers, not strings, because `REST_FRAMEWORK["COERCE_DECIMAL_TO_STRING"]` is `False`. In `response.data` they are `Decimal` values.
@@ -93,6 +102,10 @@ Schema migrations are generated with `uv run python manage.py makemigrations cla
 Validation happens where subjects are written, which is the admin:
 - Negative price — rejected by `MinValueValidator` on the model field (shown as a form error in the admin) and by the `CheckConstraint` in the database (for anything that bypasses the form).
 - Duplicate name — rejected by `unique=True` (form error in the admin, unique index in the database).
+- Duplicate slug — the same.
+- Slug with a capital, an underscore, or a leading, trailing or double hyphen — rejected by `subject_slug_validator` (form error in the admin; `full_clean()` raises on `slug`).
+- Missing slug — the admin form requires it, because `slug` is not `blank`.
+- Blank description — accepted.
 - No level chosen — the admin form requires at least one, because `levels` is not `blank`. This is a form rule only: nothing in the database stops a subject without levels, and `full_clean()` does not check a many-to-many.
 - Unknown level — a subject can only be linked to an existing `Level` row (foreign keys of the many-to-many table).
 - Duplicate level code or name — rejected by `unique=True` on `Level.code` and `Level.name`.
@@ -106,31 +119,34 @@ There is no serializer `validate` method and no API error payload for these rule
 - `permission_classes = [AllowAny]`, declared on the viewset (no default permission class is set in settings).
 - `queryset = Subject.objects.prefetch_related("levels")`. It is not scoped to `request.user`: subjects are not bookings and belong to no student. Ordering comes from `Meta.ordering`. The prefetch keeps the list at two queries however many subjects there are.
 - `serializer_class = SubjectSerializer`.
+- `lookup_field = "slug"`, so the router builds `subjects/{slug}/` and the detail route looks the subject up by its slug. The id is not a lookup.
 - No pagination: none is configured in `REST_FRAMEWORK`, so `GET /subjects/` returns a plain JSON array.
 
 `classes/urls.py` (new):
 - A `rest_framework.routers.SimpleRouter` with `router.register("subjects", SubjectViewSet)`; `urlpatterns = router.urls`. `SimpleRouter` rather than `DefaultRouter`, so that no API root view is added at `/` (a route the route tables do not list). The later features register their viewsets on this same router.
 
 `config/urls.py`:
-- Add `path("", include("classes.urls"))`, so the routes are mounted without an app prefix: `/subjects/` and `/subjects/{id}/`.
+- Add `path("", include("classes.urls"))`, so the routes are mounted without an app prefix: `/subjects/` and `/subjects/{slug}/`.
 
 `classes/views.py` currently holds only the `startapp` stub (`from django.shortcuts import render`); the stub import is removed, since there are no templates.
 
 ## Admin
 `classes/admin.py` registers `Subject` (`SubjectAdmin`) alongside the existing `StudentAdmin`:
-- `list_display`: name, levels (a `level_names` method joining the level names, since a many-to-many cannot be a list column), 40-minute price, 60-minute price. `get_queryset` prefetches `levels` for it.
+- `list_display`: name, slug, levels (a `level_names` method joining the level names, since a many-to-many cannot be a list column), 40-minute price, 60-minute price. `get_queryset` prefetches `levels` for it.
 - `list_filter`: levels.
 - `filter_horizontal`: levels, so an admin picks several levels in the two-box widget.
-- `search_fields`: name. This also lets the later weekly class and trial lesson admins use an autocomplete subject field.
+- `prepopulated_fields`: the slug from the name. Django's admin script fills the slug only while it is empty, so a saved slug is not touched when the name is edited.
+- `search_fields`: name and slug. This also lets the later weekly class and trial lesson admins use an autocomplete subject field.
 
 `classes/admin.py` also registers `Level` (`LevelAdmin`): `list_display` name and code, `search_fields` name. The four levels come from the data migration; an admin can rename one or add another there. Deleting a level removes it from its subjects, which can leave a subject with none; a level that weekly classes use cannot be deleted at all (`PROTECT`, see `.claude/specs/03-weekly-classes.md`).
 
 `SubjectAdmin` uses `SubjectAdminForm`, which refuses to remove a level from a subject while weekly classes of that subject use it (`.claude/specs/03-weekly-classes.md`, Requirements 21) or trial lessons of that subject use it (`.claude/specs/04-trial-lessons.md`, Requirements 16). A subject or a level that a trial lesson uses cannot be deleted either (`PROTECT`).
 
-Admin-only: creating a subject, editing its name, levels or prices, and deleting it. None of these is possible through the API.
+Admin-only: creating a subject, editing its name, slug, description, levels or prices, and deleting it. None of these is possible through the API.
 
 ## Files to change
 - `classes/models.py` — add `Level` and `Subject`
+- `classes/validators.py` — `subject_slug_validator`
 - `classes/admin.py` — register `Level` and `Subject`
 - `classes/migrations/` — the migrations listed under Models and database changes
 - `classes/views.py` — replace the stub with `SubjectViewSet`
@@ -141,6 +157,7 @@ Admin-only: creating a subject, editing its name, levels or prices, and deleting
   - Architecture: `classes/` no longer has "only `Student`"; describe `Subject` and that `classes/urls.py` is mounted at the root
 - `.claude/agents/nest-test-writer.md` — its copies of the subject rules describe `levels`. The other command and agent files do not describe subject fields and are unchanged
 - For the change to several levels per subject: `classes/serializers.py`, `classes/views.py`, `classes/admin.py`, and, because a weekly class returns its subject's levels, `.claude/specs/03-weekly-classes.md` and Product requirements 3 in `CLAUDE.md`
+- For the slug and the description: `classes/models.py`, `classes/validators.py`, `classes/serializers.py`, `classes/views.py`, `classes/admin.py`, the migration `0011`, and, because a booking's nested subject returns the slug, `.claude/specs/03-weekly-classes.md`, `.claude/specs/04-trial-lessons.md`, `.claude/specs/05-schedule.md`, `.claude/agents/nest-test-writer.md` and Product requirements 2, 3 and 4 in `CLAUDE.md`
 
 ## Files to create
 - `classes/serializers.py`
@@ -165,14 +182,17 @@ No new dependencies.
 - Update the "Implemented vs Stub Routes" tables in `CLAUDE.md` in the same change
 - `SubjectViewSet` is a `ReadOnlyModelViewSet`, never a `ModelViewSet` with methods switched off
 - `SubjectViewSet` declares `permission_classes = [AllowAny]` explicitly; do not rely on DRF's default
-- Subject prices, names and levels are never writable through the API
+- Subject prices, names, slugs, descriptions and levels are never writable through the API
 - Levels are rows of the `Level` model linked by a `ManyToManyField`, never an array column, free text or a `TextChoices` on `Subject`
 - The four levels are created by the data migration, never by a fixture, a signal or application code, and the level names are not copied into the serializer
 - The data migration uses `apps.get_model`, never an import of the real models
 - `levels` is read-only in the API and returned as a list of `{"code", "name"}` objects
 - Any queryset that serializes subjects prefetches `levels`
 - The subject queryset is not filtered by user
-- Do not add fields the spec does not list (no description, no active flag, no currency field: prices are USD by definition)
+- Never regenerate the slug from the name: no `save()` override, signal or serializer sets it. Only the admin's `prepopulated_fields` fills it, and only while it is empty
+- The description is stored and returned as typed: no HTML escaping, sanitising or Markdown rendering on the server
+- The detail route looks a subject up by slug only (`lookup_field = "slug"`); do not add an id lookup beside it
+- Do not add fields the spec does not list (no active flag, no currency field: prices are USD by definition)
 - The non-negative price rule is enforced twice: a `MinValueValidator` on each price field and a `CheckConstraint` per price
 - Use `Decimal("0")`, not a float, in the validator
 - Do not change `COERCE_DECIMAL_TO_STRING`; prices stay JSON numbers
@@ -183,26 +203,28 @@ No new dependencies.
 ## Tests
 Covered by `classes/tests/test_subjects.py`, written and run with `/test-feature subjects`, not as part of implementation. It must cover:
 - `GET /subjects/`: 200 for an anonymous request and for an authenticated student; returns every subject; an empty list when there are none; subjects ordered by name; the body is a plain list (not paginated)
-- `GET /subjects/{id}/`: 200 for an anonymous request and for an authenticated student; 404 for an id that does not exist
-- Response shape: exactly `id`, `name`, `levels`, `price_40_min`, `price_60_min`; `levels` is a list of objects with exactly `code` and `name`; a subject with one level returns a one-item list and a subject with several returns all of them, in the order of Requirements 10; each of the four levels returns its code and matching name; both prices returned as decimals and compared as `Decimal`; a subject whose two prices differ returns each in the right field
-- Read-only: `POST /subjects/` and `PUT` / `PATCH` / `DELETE /subjects/{id}/` return 405, anonymous and authenticated, and create, change or delete nothing
+- `GET /subjects/{slug}/`: 200 for an anonymous request and for an authenticated student, returning the subject with that slug; 404 for a slug no subject has; 404 for the subject's numeric id
+- Response shape: exactly `id`, `name`, `slug`, `description`, `levels`, `price_40_min`, `price_60_min`; `slug` and `description` match the subject; a blank description is returned as an empty string; a description with HTML or Markdown characters and line breaks is returned unchanged; `levels` is a list of objects with exactly `code` and `name`; a subject with one level returns a one-item list and a subject with several returns all of them, in the order of Requirements 10; each of the four levels returns its code and matching name; both prices returned as decimals and compared as `Decimal`; a subject whose two prices differ returns each in the right field
+- Read-only: `POST /subjects/` and `PUT` / `PATCH` / `DELETE /subjects/{slug}/` return 405, anonymous and authenticated, and create, change or delete nothing
+- Slug rules: a duplicate slug raises `IntegrityError`; `full_clean()` accepts `chemistry`, `a-level-maths` and `physics-101` and rejects, on `slug`, a capital letter, an underscore, a space, a leading hyphen, a trailing hyphen, a double hyphen and an empty slug; saving a subject with a new name leaves its slug unchanged; a blank description passes `full_clean()`
 - Model rules: a duplicate name raises `IntegrityError`; a negative price fails `full_clean()` and, saved without validation, raises `IntegrityError`; a price of 0 is accepted
 - Levels: the four levels of Requirements 10 exist in the test database with their codes and names, without the test creating them (the data migration ran); a duplicate level code raises `IntegrityError`; two subjects can share a level
 - Query count: `GET /subjects/` runs the same number of queries for one subject as for several
 
-Tests fetch the seeded levels (`Level.objects.get(code="o_level")`) rather than creating levels with those codes, which would break the unique constraint. The rule that the admin form requires at least one level is a form rule and is not covered by the API tests.
+Every subject a test builds gets its own slug. Tests fetch the seeded levels (`Level.objects.get(code="o_level")`) rather than creating levels with those codes, which would break the unique constraint. The rule that the admin form requires at least one level is a form rule and is not covered by the API tests.
 
 ## Definition of done
 - [ ] `uv run python manage.py makemigrations --check` reports no missing migrations
-- [ ] Each route returns the expected status for an anonymous request (`GET /subjects/` and `GET /subjects/{id}/` return 200; `POST /subjects/` and `PUT` / `PATCH` / `DELETE /subjects/{id}/` return 405)
+- [ ] Each route returns the expected status for an anonymous request (`GET /subjects/` and `GET /subjects/{slug}/` return 200; `POST /subjects/` and `PUT` / `PATCH` / `DELETE /subjects/{slug}/` return 405)
 - [ ] The feature's routes are marked Implemented in `CLAUDE.md`
 - [ ] `uv run python manage.py migrate` applies the `classes` migrations cleanly, on an empty database and on one that already holds subjects
 - [ ] After migrating, the four levels exist, and every subject that had a level before has it among its levels (an "O/A Level" subject has O Level and A Level)
-- [ ] A subject created in the Django admin appears in `GET /subjects/` with `id`, `name`, `levels`, `price_40_min` and `price_60_min`, the levels as a list of `code` and `name` objects and the prices as JSON numbers
+- [ ] A subject created in the Django admin appears in `GET /subjects/` with `id`, `name`, `slug`, `description`, `levels`, `price_40_min` and `price_60_min`, the levels as a list of `code` and `name` objects and the prices as JSON numbers
 - [ ] `GET /subjects/` lists subjects in name order
-- [ ] `GET /subjects/{id}/` returns that subject, and 404 for an unknown id
+- [ ] `GET /subjects/{slug}/` returns that subject, and 404 for an unknown slug and for the numeric id
+- [ ] In the Django admin, the slug is prefilled from the name while a subject is added, and renaming a saved subject leaves its slug; a slug with a capital or an underscore and a duplicate slug are form errors; the description is a multi-line box and may be left blank
 - [ ] `GET /subjects/` with a valid `JWT` token returns the same body as the anonymous request
-- [ ] In the Django admin, Subject has a list page showing name, levels and both prices, can be searched by name and filtered by level; its form lets an admin pick several levels and refuses to save with none; Level has its own list page
+- [ ] In the Django admin, Subject has a list page showing name, slug, levels and both prices, can be searched by name or slug and filtered by level; its form lets an admin pick several levels and refuses to save with none; Level has its own list page
 - [ ] The admin rejects a negative price and a duplicate name with a form error, and accepts a price of 0
 - [ ] `GET /` returns 404 (no API root view was added)
 - [ ] `uv run pytest classes/tests/test_subjects.py` passes (after `/test-feature subjects`)

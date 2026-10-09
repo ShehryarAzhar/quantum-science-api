@@ -1,4 +1,5 @@
 import datetime
+import itertools
 from decimal import Decimal
 
 import pytest
@@ -14,7 +15,8 @@ from classes.models import Level, Student, Subject, TrialLesson, WeeklyClass
 SCHEDULE_KEYS = {"weekly_classes", "trial_lesson", "weekly_cost"}
 CLASS_KEYS = {"id", "subject", "level", "day", "day_display", "time", "duration", "price"}
 LESSON_KEYS = {"id", "subject", "level", "starts_at", "completed"}
-SUBJECT_KEYS = {"id", "name", "levels"}
+SUBJECT_KEYS = {"id", "name", "slug", "levels"}
+SLUG_COUNTER = itertools.count(1)
 LEVEL_KEYS = {"code", "name"}
 DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -31,6 +33,8 @@ def get_level(code):
 
 
 def make_subject(levels=("o_level",), price_40="10.00", price_60="15.00", **kwargs):
+    if "slug" not in kwargs:
+        kwargs["slug"] = f"subject-{next(SLUG_COUNTER)}"
     subject = baker.make(
         Subject,
         price_40_min=Decimal(price_40),
@@ -142,6 +146,10 @@ class TestGetSchedule:
         assert set(item["subject"].keys()) == SUBJECT_KEYS
         assert item["subject"]["id"] == subject.id
         assert item["subject"]["name"] == subject.name
+        assert item["subject"]["slug"] == subject.slug
+        assert "description" not in item["subject"]
+        assert "price_40_min" not in item["subject"]
+        assert "price_60_min" not in item["subject"]
         assert [lvl["code"] for lvl in item["subject"]["levels"]] == ["o_level", "a_level"]
         assert all(set(lvl.keys()) == LEVEL_KEYS for lvl in item["subject"]["levels"])
         assert set(item["level"].keys()) == LEVEL_KEYS
@@ -295,6 +303,10 @@ class TestGetSchedule:
         assert set(item["level"].keys()) == LEVEL_KEYS
         assert item["id"] == lesson.id
         assert item["subject"]["id"] == subject.id
+        assert item["subject"]["slug"] == subject.slug
+        assert "description" not in item["subject"]
+        assert "price_40_min" not in item["subject"]
+        assert "price_60_min" not in item["subject"]
         assert item["level"]["code"] == lesson.level.code
         assert item["starts_at"] == starts_at.strftime("%Y-%m-%dT%H:%M:%SZ")
         assert item["completed"] is False

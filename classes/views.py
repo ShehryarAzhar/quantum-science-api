@@ -19,6 +19,7 @@ class SubjectViewSet(ReadOnlyModelViewSet):
     queryset = Subject.objects.prefetch_related("levels")
     serializer_class = SubjectSerializer
     permission_classes = [AllowAny]
+    lookup_field = "slug"
 
 
 class WeeklyClassViewSet(ModelViewSet):

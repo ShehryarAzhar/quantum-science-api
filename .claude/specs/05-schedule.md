@@ -82,7 +82,7 @@ A response looks like:
   "weekly_classes": [
     {
       "id": 4,
-      "subject": {"id": 3, "name": "Physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]},
+      "subject": {"id": 3, "name": "Physics", "slug": "physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]},
       "level": {"code": "a_level", "name": "A Level"},
       "day": "monday",
       "day_display": "Monday",
@@ -92,7 +92,7 @@ A response looks like:
     },
     {
       "id": 7,
-      "subject": {"id": 5, "name": "Maths", "levels": [{"code": "o_level", "name": "O Level"}]},
+      "subject": {"id": 5, "name": "Maths", "slug": "maths", "levels": [{"code": "o_level", "name": "O Level"}]},
       "level": {"code": "o_level", "name": "O Level"},
       "day": "wednesday",
       "day_display": "Wednesday",
@@ -103,7 +103,7 @@ A response looks like:
   ],
   "trial_lesson": {
     "id": 1,
-    "subject": {"id": 3, "name": "Physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]},
+    "subject": {"id": 3, "name": "Physics", "slug": "physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]},
     "level": {"code": "a_level", "name": "A Level"},
     "starts_at": "2026-10-13T02:00:00Z",
     "completed": false
@@ -191,7 +191,7 @@ Covered by `classes/tests/test_schedule.py`, written and run with `/test-feature
 - Read-only: `POST`, `PUT`, `PATCH` and `DELETE /schedule/` return 405 for a student and change nothing
 - Top level: 200 with exactly `weekly_classes`, `trial_lesson` and `weekly_cost`
 - Empty: a student with no bookings gets `weekly_classes` `[]`, `trial_lesson` `null` and `weekly_cost` zero
-- Weekly class shape: each item has exactly `id`, `subject`, `level`, `day`, `day_display`, `time`, `duration`, `price`; `subject` is an object with exactly `id`, `name` and `levels` and no price fields; `level` is an object with exactly `code` and `name`
+- Weekly class shape: each item has exactly `id`, `subject`, `level`, `day`, `day_display`, `time`, `duration`, `price`; `subject` is an object with exactly `id`, `name`, `slug` and `levels` and no price fields; `level` is an object with exactly `code` and `name`
 - Price by duration: a 40-minute class has the subject's 40-minute price; a 60-minute class has the subject's 60-minute price; two classes of the same subject with different durations each get their own price
 - Total: `weekly_cost` is the sum of the classes' prices, for one class, for several classes of different subjects and durations, and for several classes of the same subject; it equals the sum of the `price` values in the response; the sum is exact (e.g. 0.10 + 0.20 is 0.30)
 - Free subject: a class of a subject priced 0.00 has `price` zero and adds nothing to the total
