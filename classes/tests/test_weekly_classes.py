@@ -1,4 +1,5 @@
 import datetime
+import itertools
 from decimal import Decimal
 
 import pytest
@@ -23,7 +24,8 @@ DAYS = [
     ("sunday", "Sunday"),
 ]
 
-SUBJECT_KEYS = {"id", "name", "levels"}
+SUBJECT_KEYS = {"id", "name", "slug", "levels"}
+SLUG_COUNTER = itertools.count(1)
 LEVEL_KEYS = {"code", "name"}
 CLASS_KEYS = {"id", "subject", "level", "day", "day_display", "time", "duration"}
 CLASH_MESSAGE = "This timeslot is already booked."
@@ -42,6 +44,7 @@ def make_subject(levels=("o_level",), **kwargs):
     defaults = {
         "price_40_min": Decimal("10.00"),
         "price_60_min": Decimal("15.00"),
+        "slug": f"subject-{next(SLUG_COUNTER)}",
     }
     defaults.update(kwargs)
     subject = baker.make(Subject, **defaults)
@@ -53,6 +56,7 @@ def subject_data(subject):
     return {
         "id": subject.id,
         "name": subject.name,
+        "slug": subject.slug,
         "levels": [
             {"code": level.code, "name": level.name} for level in subject.levels.all()
         ],
@@ -268,6 +272,7 @@ class TestCreateWeeklyClass:
             "subject": {
                 "id": subject.id,
                 "name": "Physics",
+                "slug": subject.slug,
                 "levels": [level_data("o_level")],
             },
             "level": level_data("o_level"),
@@ -387,8 +392,11 @@ class TestCreateWeeklyClass:
         response = create_class(payload(subject))
 
         assert set(response.data["subject"].keys()) == SUBJECT_KEYS
+        assert "description" not in response.data["subject"]
         assert "price_40_min" not in response.data["subject"]
         assert "price_60_min" not in response.data["subject"]
+        assert "description" not in response.data["subject"]
+        assert response.data["subject"]["slug"] == subject.slug
 
     def test_if_student_or_user_in_body_is_ignored_returns_201(
         self, student_user, create_class
@@ -659,6 +667,7 @@ class TestListWeeklyClasses:
                 "subject": {
                     "id": subject.id,
                     "name": "Chemistry",
+                    "slug": subject.slug,
                     "levels": [level_data("a_level"), level_data("university")],
                 },
                 "level": level_data("university"),
@@ -760,6 +769,7 @@ class TestRetrieveWeeklyClass:
             "subject": {
                 "id": subject.id,
                 "name": "Biology",
+                "slug": subject.slug,
                 "levels": [level_data("o_level"), level_data("a_level")],
             },
             "level": level_data("a_level"),
@@ -778,6 +788,7 @@ class TestRetrieveWeeklyClass:
         response = retrieve_class(weekly_class.id)
 
         assert set(response.data["subject"].keys()) == SUBJECT_KEYS
+        assert "description" not in response.data["subject"]
         assert set(response.data["level"].keys()) == LEVEL_KEYS
 
     def test_if_class_belongs_to_another_student_returns_404(
@@ -812,6 +823,7 @@ class TestUpdateWeeklyClass:
         assert response.data["subject"] == {
             "id": new_subject.id,
             "name": "Maths",
+            "slug": new_subject.slug,
             "levels": [level_data("all_levels")],
         }
         assert response.data["level"] == level_data("all_levels")
@@ -997,6 +1009,7 @@ class TestUpdateWeeklyClass:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["subject"]["id"] == new_subject.id
         assert set(response.data["subject"].keys()) == SUBJECT_KEYS
+        assert "description" not in response.data["subject"]
         weekly_class.refresh_from_db()
         assert weekly_class.subject == new_subject
 
@@ -1443,6 +1456,7 @@ class TestLevelProtection:
 def subject_form(subject, levels, **overrides):
     data = {
         "name": subject.name,
+        "slug": subject.slug,
         "levels": [get_level(code).pk for code in levels],
         "price_40_min": "10.00",
         "price_60_min": "15.00",

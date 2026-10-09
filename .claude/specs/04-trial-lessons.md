@@ -43,7 +43,7 @@ Choices of this spec that follow the weekly class feature:
 21. **Owner** — a trial lesson belongs to a `Student`, not directly to the user, through a one-to-one relation. `CLAUDE.md` asks for a uniqueness constraint "on the user"; a Student is itself one-to-one with the user, so one trial lesson per Student is one per user. Deleting the student (or their account) deletes their trial lesson.
 22. **Users without a Student** — a logged-in user with no Student profile gets 403 on every `/trial-lessons/` route.
 23. **Deleting a subject** — a subject that still has a trial lesson cannot be deleted (`PROTECT`). This is the decision `.claude/specs/02-subjects.md` deferred to this spec.
-24. **Subject in requests and responses** — a request sends `subject` as the subject's id. A response returns it as a nested object with `id`, `name` and `levels`, and no prices, exactly as on a weekly class.
+24. **Subject in requests and responses** — a request sends `subject` as the subject's id. A response returns it as a nested object with `id`, `name`, `slug` and `levels`, and no prices, exactly as on a weekly class.
 
 Choices of this spec that are not product rules:
 
@@ -111,7 +111,7 @@ The migration is generated with `uv run python manage.py makemigrations classes`
 `classes.serializers.TrialLessonSerializer` (`ModelSerializer`, in the existing `classes/serializers.py`):
 - Fields: `id`, `subject`, `level`, `starts_at`, `completed`.
 - `id` and `completed` are read-only. A `completed` value in a request body is ignored.
-- `subject` — on input, a `PrimaryKeyRelatedField` over all subjects (the `ModelSerializer` default): the request sends the id. On output, `to_representation()` replaces it with `WeeklyClassSubjectSerializer(instance.subject).data`: `{"id", "name", "levels"}`, no prices.
+- `subject` — on input, a `PrimaryKeyRelatedField` over all subjects (the `ModelSerializer` default): the request sends the id. On output, `to_representation()` replaces it with `WeeklyClassSubjectSerializer(instance.subject).data`: `{"id", "name", "slug", "levels"}`, no prices.
 - `level` — on input, a declared `SlugRelatedField(slug_field="code", queryset=Level.objects.all())`: the request sends the code. On output, `to_representation()` replaces it with `LevelSerializer(instance.level).data`: `{"code", "name"}`.
 - `starts_at` — DRF's `DateTimeField`. Returned in UTC as `"2026-10-13T02:00:00Z"`. An input with an offset is converted to UTC; an input without an offset is read as UTC. The full-hour rule is applied to the UTC value.
 - `student` is not a serializer field. It is never read from the request body and never returned; the viewset sets it from `request.user` on create, and it cannot change on update.
@@ -122,7 +122,7 @@ A response looks like:
 ```json
 {
   "id": 1,
-  "subject": {"id": 3, "name": "Physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]},
+  "subject": {"id": 3, "name": "Physics", "slug": "physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]},
   "level": {"code": "a_level", "name": "A Level"},
   "starts_at": "2026-10-13T02:00:00Z",
   "completed": false
@@ -249,7 +249,7 @@ No new dependencies.
 Covered by `classes/tests/test_trial_lessons.py`, written and run with `/test-feature trial-lessons`, not as part of implementation. A test student is `baker.make(get_user_model())` plus `baker.make(Student, user=user)`. Times are built relative to `timezone.now()`, rounded to a full hour, never hard-coded dates; a past or completed lesson is created directly with `baker.make`, since the API refuses to book one. It must cover:
 - Access: every route returns 401 for an anonymous request and 403 for an authenticated user without a Student
 - `POST /trial-lessons/`: 201 with exactly `id`, `subject`, `level`, `starts_at`, `completed`; `completed` is `false`; the lesson is stored against the logged-in student; a `student` or `user` value in the body is ignored; `completed: true` in the body is ignored
-- Shapes: `subject` is an object with exactly `id`, `name` and `levels` and no prices; `level` is an object with exactly `code` and `name`; `starts_at` comes back in UTC; an input with a non-UTC offset is stored as the same moment in UTC
+- Shapes: `subject` is an object with exactly `id`, `name`, `slug` and `levels` and no prices; `level` is an object with exactly `code` and `name`; `starts_at` comes back in UTC; an input with a non-UTC offset is stored as the same moment in UTC
 - Required fields: each of `subject`, `level`, `starts_at` missing returns 400
 - Invalid values: an unknown subject id, an unknown level code and a malformed date-time each return 400 and create nothing
 - Level belongs to the subject: accepted when it is one of the subject's; 400 under `level` when it is not, on create and `PUT`; on `PATCH`, changing only the level or only the subject is checked against the stored other one
@@ -277,7 +277,7 @@ Not covered here: the schedule and the weekly cost (spec 05).
 - [ ] Each route returns the expected status for an anonymous request (all six `/trial-lessons/` routes return 401)
 - [ ] The feature's routes are marked Implemented in `CLAUDE.md`
 - [ ] `uv run python manage.py migrate` applies `classes.0010` cleanly on MySQL, including the unique constraint and the full-hour check constraint
-- [ ] A registered student can `POST /trial-lessons/` with `subject`, `level` and `starts_at` and gets 201 with `id`, `subject`, `level`, `starts_at` and `completed`, where `subject` comes back as `{"id", "name", "levels"}`, `level` as `{"code", "name"}` and `starts_at` in UTC
+- [ ] A registered student can `POST /trial-lessons/` with `subject`, `level` and `starts_at` and gets 201 with `id`, `subject`, `level`, `starts_at` and `completed`, where `subject` comes back as `{"id", "name", "slug", "levels"}`, `level` as `{"code", "name"}` and `starts_at` in UTC
 - [ ] `POST /trial-lessons/` with a level the subject does not have returns 400 under `level`
 - [ ] `POST /trial-lessons/` with a `starts_at` at half past the hour, or in the past, returns 400 under `starts_at`
 - [ ] A second `POST /trial-lessons/` by the same student returns 400 with `"You have already booked a trial lesson."`

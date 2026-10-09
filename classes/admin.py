@@ -73,10 +73,19 @@ class SubjectAdminForm(forms.ModelForm):
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectAdminForm
-    list_display = ("name", "level_names", "price_40_min", "price_60_min")
+    list_display = (
+        "name",
+        "slug",
+        "level_names",
+        "price_40_min",
+        "price_60_min",
+    )
     list_filter = ("levels",)
-    search_fields = ("name",)
+    search_fields = ("name", "slug")
     filter_horizontal = ("levels",)
+    # Filled from the name only while the slug is empty, so a saved slug
+    # stays as it is when the subject is renamed.
+    prepopulated_fields = {"slug": ("name",)}
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related("levels")

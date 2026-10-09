@@ -1,4 +1,5 @@
 import datetime
+import itertools
 from decimal import Decimal
 
 import pytest
@@ -14,7 +15,8 @@ from classes.admin import SubjectAdminForm
 from classes.models import Level, Student, Subject, TrialLesson, WeeklyClass
 from classes.timeslots import DayOfWeek
 
-SUBJECT_KEYS = {"id", "name", "levels"}
+SLUG_COUNTER = itertools.count(1)
+SUBJECT_KEYS = {"id", "name", "slug", "levels"}
 LEVEL_KEYS = {"code", "name"}
 LESSON_KEYS = {"id", "subject", "level", "starts_at", "completed"}
 CLASH_MESSAGE = "This timeslot is already booked."
@@ -29,6 +31,7 @@ def get_level(code):
 
 def make_subject(levels=("o_level",), **kwargs):
     defaults = {
+        "slug": f"subject-{next(SLUG_COUNTER)}",
         "price_40_min": Decimal("10.00"),
         "price_60_min": Decimal("15.00"),
     }
@@ -226,6 +229,7 @@ class TestCreateTrialLesson:
             "subject": {
                 "id": subject.id,
                 "name": subject.name,
+                "slug": subject.slug,
                 "levels": [
                     {"code": level.code, "name": level.name}
                     for level in subject.levels.all()
@@ -256,6 +260,7 @@ class TestCreateTrialLesson:
         assert set(body["subject"]) == SUBJECT_KEYS
         assert "price_40_min" not in body["subject"]
         assert "price_60_min" not in body["subject"]
+        assert "description" not in body["subject"]
         assert set(body["level"]) == LEVEL_KEYS
 
     def test_if_body_has_student_or_user_they_are_ignored(
@@ -563,6 +568,7 @@ class TestRetrieveTrialLesson:
             "subject": {
                 "id": subject.id,
                 "name": subject.name,
+                "slug": subject.slug,
                 "levels": [
                     {"code": level.code, "name": level.name}
                     for level in subject.levels.all()
@@ -1282,6 +1288,7 @@ class TestTrialLessonModel:
 def subject_form(subject, levels, **overrides):
     data = {
         "name": subject.name,
+        "slug": subject.slug,
         "levels": [get_level(code).pk for code in levels],
         "price_40_min": "10.00",
         "price_60_min": "15.00",

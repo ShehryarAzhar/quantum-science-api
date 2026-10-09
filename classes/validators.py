@@ -11,6 +11,13 @@ phone_number_validator = RegexValidator(
     message="Enter a valid phone number: 7 to 15 digits, optionally starting with +.",
 )
 
+# Stricter than SlugField's own validator, which also takes capitals and
+# underscores: the slug is the subject's public URL on the frontend.
+subject_slug_validator = RegexValidator(
+    regex=r"^[a-z0-9]+(?:-[a-z0-9]+)*\Z",
+    message="Enter a valid slug: lowercase letters, digits and hyphens.",
+)
+
 
 def validate_full_hour(value):
     # A trial lesson passes a datetime: its full hour is judged in UTC.

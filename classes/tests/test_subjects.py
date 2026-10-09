@@ -17,12 +17,18 @@ LEVELS = [
     ('university', 'University Level'),
 ]
 
-EXPECTED_KEYS = {'id', 'name', 'levels', 'price_40_min', 'price_60_min'}
+EXPECTED_KEYS = {
+    'id', 'name', 'slug', 'description', 'levels', 'price_40_min', 'price_60_min',
+}
 
 
 def make_subject(levels=('o_level',), **kwargs):
     kwargs.setdefault('price_40_min', Decimal('10.00'))
     kwargs.setdefault('price_60_min', Decimal('15.00'))
+    kwargs.setdefault('description', '')
+    if 'slug' not in kwargs:
+        # Every subject gets its own slug, derived from its (unique) test name.
+        kwargs['slug'] = kwargs.get('name', 'subject').lower().replace(' ', '-')
     subject = baker.make(Subject, **kwargs)
     subject.levels.add(*[Level.objects.get(code=code) for code in levels])
     return subject
@@ -32,6 +38,8 @@ def expected_body(subject):
     return {
         'id': subject.id,
         'name': subject.name,
+        'slug': subject.slug,
+        'description': subject.description,
         'levels': [
             {'code': level.code, 'name': level.name}
             for level in subject.levels.order_by('id')
@@ -50,8 +58,8 @@ def list_subjects(api_client):
 
 @pytest.fixture
 def retrieve_subject(api_client):
-    def do_retrieve_subject(subject_id):
-        return api_client.get(f'/subjects/{subject_id}/')
+    def do_retrieve_subject(slug):
+        return api_client.get(f'/subjects/{slug}/')
     return do_retrieve_subject
 
 
@@ -104,6 +112,17 @@ class TestListSubjects:
         assert response.data == [expected_body(subject)]
         assert set(response.data[0].keys()) == EXPECTED_KEYS
 
+    def test_if_subjects_have_slug_and_description_returns_them_for_each_subject(
+            self, list_subjects):
+        biology = make_subject(name='Biology', slug='a-level-biology', description='Cells.')
+        physics = make_subject(name='Physics', description='')
+
+        response = list_subjects()
+
+        assert response.data == [expected_body(biology), expected_body(physics)]
+        assert [item['slug'] for item in response.data] == ['a-level-biology', 'physics']
+        assert [item['description'] for item in response.data] == ['Cells.', '']
+
     def test_if_subject_has_several_levels_returns_each_level_in_the_list(self, list_subjects):
         subject = make_subject(name='Physics', levels=('o_level', 'a_level'))
 
@@ -143,7 +162,7 @@ class TestRetrieveSubject:
     def test_if_user_is_anonymous_returns_200(self, retrieve_subject):
         subject = make_subject(name='Physics')
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data == expected_body(subject)
@@ -152,29 +171,74 @@ class TestRetrieveSubject:
         authenticate()
         subject = make_subject(name='Physics')
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data == expected_body(subject)
 
-    def test_if_subject_does_not_exist_returns_404(self, retrieve_subject):
-        subject = make_subject(name='Physics')
+    def test_if_slug_is_unknown_returns_404(self, retrieve_subject):
+        make_subject(name='Physics')
 
-        response = retrieve_subject(subject.id + 1000)
+        response = retrieve_subject('no-such-subject')
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_if_numeric_id_is_used_returns_404(self, retrieve_subject):
+        subject = make_subject(name='Physics')
+
+        response = retrieve_subject(subject.id)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_if_several_subjects_exist_returns_the_one_with_that_slug(self, retrieve_subject):
+        make_subject(name='Biology')
+        chemistry = make_subject(name='Chemistry', slug='a-level-chemistry')
+        make_subject(name='Physics')
+
+        response = retrieve_subject('a-level-chemistry')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['id'] == chemistry.id
+        assert response.data == expected_body(chemistry)
+
+    def test_if_subject_is_retrieved_returns_slug_and_description_of_the_subject(
+            self, retrieve_subject):
+        subject = make_subject(
+            name='Physics', slug='physics-101', description='Forces and motion.')
+
+        response = retrieve_subject(subject.slug)
+
+        assert response.data['slug'] == 'physics-101'
+        assert response.data['description'] == 'Forces and motion.'
+        assert response.data['id'] == subject.id
+
+    def test_if_description_is_blank_returns_empty_string(self, retrieve_subject):
+        subject = make_subject(name='Physics', description='')
+
+        response = retrieve_subject(subject.slug)
+
+        assert response.data['description'] == ''
+
+    def test_if_description_has_html_markdown_and_line_breaks_returns_it_unchanged(
+            self, retrieve_subject):
+        text = '<b>Bold</b> & <script>alert("x")</script>\n\n# Heading\n**strong** [link](http://x.y)\nlast line'
+        subject = make_subject(name='Physics', description=text)
+
+        response = retrieve_subject(subject.slug)
+
+        assert response.data['description'] == text
 
     def test_if_subject_exists_returns_only_the_expected_fields(self, retrieve_subject):
         subject = make_subject(name='Physics')
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert set(response.data.keys()) == EXPECTED_KEYS
 
-    def test_if_subject_has_old_level_fields_does_not_return_them(self, retrieve_subject):
+    def test_if_subject_is_retrieved_returns_no_old_level_fields_does_not_return_them(self, retrieve_subject):
         subject = make_subject(name='Physics')
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert 'level' not in response.data
         assert 'level_display' not in response.data
@@ -182,14 +246,14 @@ class TestRetrieveSubject:
     def test_if_subject_has_one_level_returns_one_item_list(self, retrieve_subject):
         subject = make_subject(name='Physics', levels=('university',))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.data['levels'] == [{'code': 'university', 'name': 'University Level'}]
 
     def test_if_subject_has_several_levels_returns_all_of_them(self, retrieve_subject):
         subject = make_subject(name='Physics', levels=('o_level', 'a_level', 'university'))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.data['levels'] == [
             {'code': 'o_level', 'name': 'O Level'},
@@ -205,7 +269,7 @@ class TestRetrieveSubject:
         for code in ('university', 'all_levels', 'a_level', 'o_level'):
             subject.levels.add(Level.objects.get(code=code))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert [level['code'] for level in response.data['levels']] == [
             'o_level', 'a_level', 'all_levels', 'university']
@@ -214,7 +278,7 @@ class TestRetrieveSubject:
             self, retrieve_subject):
         subject = make_subject(name='Physics', levels=('o_level', 'a_level'))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert all(set(level.keys()) == {'code', 'name'} for level in response.data['levels'])
 
@@ -222,7 +286,7 @@ class TestRetrieveSubject:
     def test_if_subject_has_level_returns_its_code_and_name(self, retrieve_subject, code, name):
         subject = make_subject(name='Physics', levels=(code,))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.data['levels'] == [{'code': code, 'name': name}]
 
@@ -230,7 +294,7 @@ class TestRetrieveSubject:
         subject = make_subject(
             name='Physics', price_40_min=Decimal('12.50'), price_60_min=Decimal('9.75'))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.data['price_40_min'] == Decimal('12.50')
         assert response.data['price_60_min'] == Decimal('9.75')
@@ -240,7 +304,7 @@ class TestRetrieveSubject:
     def test_if_price_is_zero_returns_200_with_zero_price(self, retrieve_subject):
         subject = make_subject(name='Free', price_40_min=Decimal('0.00'))
 
-        response = retrieve_subject(subject.id)
+        response = retrieve_subject(subject.slug)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['price_40_min'] == Decimal('0')
@@ -255,6 +319,8 @@ class TestWriteSubjectsIsNotAllowed:
 
         response = api_client.post('/subjects/', {
             'name': 'Chemistry',
+            'slug': 'chemistry',
+            'description': 'Atoms.',
             'levels': ['o_level'],
             'price_40_min': '10.00',
             'price_60_min': '15.00',
@@ -269,8 +335,10 @@ class TestWriteSubjectsIsNotAllowed:
             authenticate()
         subject = make_subject(name='Physics', price_40_min=Decimal('10.00'))
 
-        response = api_client.put(f'/subjects/{subject.id}/', {
+        response = api_client.put(f'/subjects/{subject.slug}/', {
             'name': 'Changed',
+            'slug': 'changed',
+            'description': 'Changed text.',
             'levels': ['university'],
             'price_40_min': '99.00',
             'price_60_min': '99.00',
@@ -279,6 +347,8 @@ class TestWriteSubjectsIsNotAllowed:
         subject.refresh_from_db()
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         assert subject.name == 'Physics'
+        assert subject.slug == 'physics'
+        assert subject.description == ''
         assert subject.price_40_min == Decimal('10.00')
         assert list(subject.levels.values_list('code', flat=True)) == ['o_level']
 
@@ -288,11 +358,13 @@ class TestWriteSubjectsIsNotAllowed:
             authenticate()
         subject = make_subject(name='Physics', price_40_min=Decimal('10.00'))
 
-        response = api_client.patch(f'/subjects/{subject.id}/', {'price_40_min': '99.00'})
+        response = api_client.patch(
+            f'/subjects/{subject.slug}/', {'price_40_min': '99.00', 'slug': 'hacked'})
 
         subject.refresh_from_db()
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         assert subject.price_40_min == Decimal('10.00')
+        assert subject.slug == 'physics'
 
     @pytest.mark.parametrize('is_authenticated', [False, True])
     def test_if_method_is_delete_returns_405(self, api_client, authenticate, is_authenticated):
@@ -300,7 +372,7 @@ class TestWriteSubjectsIsNotAllowed:
             authenticate()
         subject = make_subject(name='Physics')
 
-        response = api_client.delete(f'/subjects/{subject.id}/')
+        response = api_client.delete(f'/subjects/{subject.slug}/')
 
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
         assert Subject.objects.filter(id=subject.id).exists()
@@ -311,6 +383,7 @@ class TestSubjectModelRules:
     def build(self, **kwargs):
         data = {
             'name': 'Physics',
+            'slug': 'physics',
             'price_40_min': Decimal('10.00'),
             'price_60_min': Decimal('15.00'),
         }
@@ -323,10 +396,52 @@ class TestSubjectModelRules:
         with pytest.raises(IntegrityError):
             with transaction.atomic():
                 Subject.objects.create(
-                    name='Physics',
+                    name='Physics', slug='physics-two',
                     price_40_min=Decimal('5.00'), price_60_min=Decimal('8.00'))
 
         assert Subject.objects.filter(name='Physics').count() == 1
+
+    def test_if_slug_is_duplicate_raises_integrity_error(self):
+        make_subject(name='Physics', slug='science')
+
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                Subject.objects.create(
+                    name='Biology', slug='science',
+                    price_40_min=Decimal('5.00'), price_60_min=Decimal('8.00'))
+
+        assert Subject.objects.filter(slug='science').count() == 1
+
+    @pytest.mark.parametrize('slug', ['chemistry', 'a-level-maths', 'physics-101'])
+    def test_if_slug_is_valid_passes_full_clean(self, slug):
+        subject = self.build(slug=slug)
+
+        subject.full_clean()
+
+    @pytest.mark.parametrize('slug', [
+        'Chemistry', 'chem_101', 'chem 101', '-chem', 'chem-', 'chem--101', ''])
+    def test_if_slug_is_invalid_fails_full_clean_on_slug(self, slug):
+        subject = self.build(slug=slug)
+
+        with pytest.raises(ValidationError) as error:
+            subject.full_clean()
+
+        assert 'slug' in error.value.message_dict
+
+    def test_if_subject_is_renamed_keeps_its_slug(self):
+        subject = make_subject(name='Physics', slug='physics')
+
+        subject.name = 'Applied Physics'
+        subject.save()
+
+        subject.refresh_from_db()
+        assert subject.name == 'Applied Physics'
+        assert subject.slug == 'physics'
+
+    def test_if_description_is_blank_passes_full_clean(self):
+        subject = self.build(description='')
+
+        subject.full_clean()
 
     @pytest.mark.parametrize('field', ['price_40_min', 'price_60_min'])
     def test_if_price_is_negative_fails_full_clean(self, field):

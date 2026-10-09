@@ -35,6 +35,8 @@ class SubjectSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "slug",
+            "description",
             "levels",
             "price_40_min",
             "price_60_min",
@@ -46,7 +48,7 @@ class WeeklyClassSubjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Subject
-        fields = ["id", "name", "levels"]
+        fields = ["id", "name", "slug", "levels"]
 
 
 class SubjectLevelMixin(serializers.Serializer):

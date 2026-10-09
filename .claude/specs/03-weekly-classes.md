@@ -24,7 +24,7 @@ Decisions the user made on points `CLAUDE.md` leaves open:
 9. **Users without a Student** — a logged-in user with no Student profile (a superuser, a user created in the admin) gets 403 on every `/classes/` route.
 10. **Deleting a subject** — a subject that still has weekly classes cannot be deleted (`PROTECT`). An admin must remove or move its classes first.
 11. **Day of the week** — the API uses a text code, `monday` to `sunday`, as `day`, and returns the label (`Monday`) as the read-only `day_display`.
-12. **Subject in requests and responses** — a request sends `subject` as the subject's id. A response returns `subject` as a nested object with the subject's `id`, `name` and `levels`, from a serializer written for weekly classes only. `levels` is the same list as on `/subjects/`: one object with `code` and `name` per level of the subject (see `.claude/specs/02-subjects.md`). It carries no prices; those come from the public `/subjects/` routes.
+12. **Subject in requests and responses** — a request sends `subject` as the subject's id. A response returns `subject` as a nested object with the subject's `id`, `name`, `slug` and `levels`, from a serializer written for weekly classes only. `levels` is the same list as on `/subjects/`: one object with `code` and `name` per level of the subject (see `.claude/specs/02-subjects.md`). It carries no prices; those come from the public `/subjects/` routes.
 
 The level of a weekly class, added after the feature was first built (a subject can be taught at several levels, so the class has to say which one):
 
@@ -113,7 +113,7 @@ The level was added in three migrations, the same pattern as the subject levels:
 
 ## Serializers and validation
 `classes.serializers.WeeklyClassSubjectSerializer` (`ModelSerializer` on `Subject`, in the existing `classes/serializers.py`):
-- Fields: `id`, `name`, `levels`. `levels` is declared as in `SubjectSerializer`: `LevelSerializer(many=True, read_only=True)`, each item an object with `code` and `name`.
+- Fields: `id`, `name`, `slug`, `levels`. No `description`. `levels` is declared as in `SubjectSerializer`: `LevelSerializer(many=True, read_only=True)`, each item an object with `code` and `name`.
 - No prices. It is used only for output, nested in a weekly class; `SubjectSerializer` and the `/subjects/` routes are unchanged.
 
 `classes.serializers.WeeklyClassSerializer` (`ModelSerializer`, in the existing `classes/serializers.py`):
@@ -127,7 +127,7 @@ The level was added in three migrations, the same pattern as the subject levels:
 - `subject` — on input, a `PrimaryKeyRelatedField` over all subjects (the `ModelSerializer` default), so the request body sends the id (`"subject": 3`). On output, `to_representation()` replaces it with `WeeklyClassSubjectSerializer(instance.subject).data`, so every response (list, retrieve, and the body returned by create and update) carries the nested object:
 
   ```json
-  "subject": {"id": 3, "name": "Physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]}
+  "subject": {"id": 3, "name": "Physics", "slug": "physics", "levels": [{"code": "o_level", "name": "O Level"}, {"code": "a_level", "name": "A Level"}]}
   ```
 - `day` — the stored code. `day_display` is a declared read-only `CharField(source="get_day_display")`.
 - `time` — DRF's default `TimeField`; returned as `"HH:MM:SS"` (e.g. `"16:00:00"`), and accepts `"16:00"` or `"16:00:00"` as input.
@@ -250,7 +250,7 @@ No new dependencies.
 ## Tests
 Covered by `classes/tests/test_weekly_classes.py`, written and run with `/test-feature weekly-classes`, not as part of implementation. A test student is `baker.make(get_user_model())` plus `baker.make(Student, user=user)`. It must cover:
 - Access: every route returns 401 for an anonymous request and 403 for an authenticated user without a Student
-- Subject shape: in the responses of create, list, retrieve and update, `subject` is an object with exactly `id`, `name` and `levels`, matching the booked subject, with no price fields; `levels` is a list with one `{"code", "name"}` object per level of the subject, and a subject with two levels returns both; a request sends `subject` as an id, and a nested object sent as `subject` returns 400
+- Subject shape: in the responses of create, list, retrieve and update, `subject` is an object with exactly `id`, `name`, `slug` and `levels`, matching the booked subject, with no price fields; `levels` is a list with one `{"code", "name"}` object per level of the subject, and a subject with two levels returns both; a request sends `subject` as an id, and a nested object sent as `subject` returns 400
 - Level shape: in the responses of create, list, retrieve and update, `level` is an object with exactly `code` and `name`, matching the booked level; a request sends `level` as a code
 - Level belongs to the subject, on create and `PUT`: a level that is one of the subject's is accepted, for a subject with one level and for a subject with several; a level the subject does not have returns 400 with the error under `level` and creates or changes nothing
 - Level on `PATCH`: changing only the level to another of the current subject's levels returns 200; changing only the level to one the current subject lacks returns 400 under `level`; changing only the subject to one that has the current level returns 200; changing only the subject to one that lacks the current level returns 400 under `level`; changing subject and level together to a matching pair returns 200; a `PATCH` of another field (e.g. `duration`) still returns 200
@@ -279,7 +279,7 @@ Not covered here: the trial lesson clash (spec 04) and the weekly cost (spec 05)
 - [ ] The feature's routes are marked Implemented in `CLAUDE.md`
 - [ ] `uv run python manage.py migrate` applies `classes.0003` cleanly on MySQL, including the three check constraints and the unique constraint
 - [ ] `uv run python manage.py migrate` applies `classes.0007` to `0009`, and every weekly class that existed before has a level that is one of its subject's
-- [ ] A registered student can `POST /classes/` with `subject`, `level`, `day`, `time` and `duration` and gets 201 with `id`, `subject`, `level`, `day`, `day_display`, `time` and `duration`, where `subject` was sent as an id and comes back as `{"id", "name", "levels"}` with no prices, and `level` was sent as a code and comes back as `{"code", "name"}`
+- [ ] A registered student can `POST /classes/` with `subject`, `level`, `day`, `time` and `duration` and gets 201 with `id`, `subject`, `level`, `day`, `day_display`, `time` and `duration`, where `subject` was sent as an id and comes back as `{"id", "name", "slug", "levels"}` with no prices, and `level` was sent as a code and comes back as `{"code", "name"}`
 - [ ] `POST /classes/` with a level the subject does not have returns 400 under `level`
 - [ ] `PATCH /classes/{id}/` changing only `subject` to one without the class's level returns 400 under `level`, and so does changing only `level` to one the subject lacks
 - [ ] In the Django admin, removing a level from a subject whose weekly classes use it is refused with an error, and deleting a level that weekly classes use is refused
