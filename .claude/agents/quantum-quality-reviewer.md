@@ -22,7 +22,7 @@ You review quality only. Permissions, authorization, data exposure and rule bypa
 - **Apps**: `config/` (settings, root URLconf), `core/` (custom user and auth), `classes/` (subjects, weekly classes, trial lessons, schedule)
 - **User model**: custom `core.User`, referenced via `settings.AUTH_USER_MODEL` / `get_user_model()`
 - **Student profile**: `classes.Student` (one-to-one to the user, required `phone_number`), created by the `post_save` handler in `core/signals.py` when a user registers with a phone number. Superusers and admin-created users have no Student, so code must not assume `user.student` exists
-- **Auth**: delegated to Djoser + SimpleJWT; there are no hand-written auth views
+- **Auth**: delegated to Djoser + SimpleJWT; there are no hand-written auth views. Password reset is Djoser's `reset_password` / `reset_password_confirm`, configured only through settings (`DJOSER`, `SIMPLE_JWT["CHECK_REVOKE_TOKEN"]`, `PASSWORD_RESET_TIMEOUT`) plus `core.throttling.PasswordResetThrottle`; email is configured through `MAILERS`
 - **Students only**: the API has no teacher or admin endpoints; that work happens in the Django admin
 - **Tooling**: no linter or formatter is configured
 
