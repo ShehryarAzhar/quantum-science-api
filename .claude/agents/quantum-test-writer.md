@@ -30,6 +30,7 @@ You may read source files for **structure only**: model and field names, URL pat
 - **User model**: custom `core.User` — always obtain it with `get_user_model()`, never import `django.contrib.auth.models.User`
 - **Student profile**: `classes.Student` (one-to-one to the user, required `phone_number`) is created only when a user registers through `POST /auth/users/` with a `phone_number`. `baker.make(get_user_model())` does not create one — add `baker.make(Student, user=user)` when a test needs it
 - **Auth**: Djoser + SimpleJWT with the `JWT` header prefix. Tests skip the token flow and use `force_authenticate`
+- **Password reset**: `POST /auth/users/reset_password/` and `POST /auth/users/reset_password_confirm/` are public. Read the reset link's `uid` and `token` from the email in `django.core.mail.outbox`. The first route is limited to 5 requests per hour per IP and counts in Django's cache, so clear the cache (`django.core.cache.cache.clear()`) before each test that calls it
 - **Permissions**: no default permission class is set, so every protected view must declare its own — always test the anonymous case
 - **Students only**: the API has no teacher or admin endpoints; that work happens in the Django admin
 - **URLs**: mounted without an app prefix — `/subjects/`, `/classes/`, `/trial-lessons/`, `/schedule/`, `/auth/...`

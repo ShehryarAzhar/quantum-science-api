@@ -4,6 +4,12 @@ from djoser.conf import settings as djoser_settings
 from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
 from djoser.serializers import UserSerializer as BaseUserSerializer
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import (
+    TokenRefreshSerializer as BaseTokenRefreshSerializer,
+)
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.utils import get_md5_hash_password
 
 from classes.constants import PHONE_NUMBER_MAX_LENGTH
 from classes.models import Student
@@ -58,6 +64,28 @@ class UserCreateSerializer(BaseUserCreateSerializer):
             setattr(user, PHONE_NUMBER_ATTR, phone_number)
             user.save()
         return user
+
+
+class TokenRefreshSerializer(BaseTokenRefreshSerializer):
+    default_error_messages = {
+        "password_changed": "The user's password has been changed.",
+    }
+
+    def validate(self, attrs):
+        # CHECK_REVOKE_TOKEN is only checked when an access token
+        # authenticates a request, so a refresh token issued before a password
+        # change is rejected here.
+        refresh = self.token_class(attrs["refresh"])
+        user = User.objects.filter(
+            **{jwt_settings.USER_ID_FIELD: refresh.payload.get(jwt_settings.USER_ID_CLAIM)}
+        ).first()
+        if user is not None and refresh.payload.get(
+            jwt_settings.REVOKE_TOKEN_CLAIM
+        ) != get_md5_hash_password(user.password):
+            raise AuthenticationFailed(
+                self.error_messages["password_changed"], "password_changed"
+            )
+        return super().validate(attrs)
 
 
 class CurrentUserSerializer(BaseUserSerializer):

@@ -22,6 +22,7 @@ You review security only. Naming, structure, Django idioms and project conventio
 - **User model**: custom `core.User`, referenced via `settings.AUTH_USER_MODEL` / `get_user_model()`
 - **Student profile**: `classes.Student` (one-to-one to the user, required `phone_number`), created by the `post_save` handler in `core/signals.py` when a user registers with a phone number. `phone_number` is write-only on registration and read-only on `/auth/users/me/`; a student must only ever see their own. Superusers and admin-created users have no Student
 - **Auth**: delegated to Djoser + SimpleJWT, mounted under `auth/`; the header prefix is `JWT`, not `Bearer`
+- **Password reset**: `POST /auth/users/reset_password/` always answers 204 so it cannot reveal which emails are registered, and is limited to 5 requests per hour per IP by `core.throttling.PasswordResetThrottle`; the emailed link points at the frontend, is valid for one hour and works once; a JWT issued before a password change is rejected (`SIMPLE_JWT["CHECK_REVOKE_TOKEN"]`)
 - **Permissions**: `REST_FRAMEWORK` sets no default permission class, so any view that does not declare `permission_classes` is open to anonymous requests
 - **Students only**: the API has no teacher or admin endpoints; that work happens in the Django admin
 - **Settings**: a single `config/settings.py` that loads secrets and database credentials from `.env`

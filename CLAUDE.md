@@ -21,6 +21,13 @@ All five requirements are built (see Implemented vs Stub Routes). The numbering 
    - Users created outside registration (`createsuperuser`, the Django admin) have no phone number and no Student.
    - A student can read their own details, including the phone number, at `/auth/users/me/`, and edit their email, first name and last name there. Username and phone number cannot be changed through the API; the phone number is edited in the Django admin.
    - A student can delete their own account, which deletes their Student.
+   - A user who forgot their password resets it by email, in two public steps:
+     - `POST /auth/users/reset_password/` takes `email` and always answers 204, whether or not the email is registered, so the route cannot be used to find out which emails exist. A missing or malformed email is a 400. The reset email is sent only to an active user with a usable password.
+     - The email holds a link to the frontend, `{protocol}://{frontend domain}/reset-password/{uid}/{token}` (e.g. `http://localhost:3000/reset-password/MQ/abc-123`). The link is valid for one hour.
+     - `POST /auth/users/reset_password_confirm/` takes `uid`, `token` and `new_password` and answers 204. A wrong `uid`, a wrong, expired or already used `token`, or a `new_password` that fails the password validators is a 400 on that field, and the password is not changed. There is no retype field.
+     - A link works once. After a reset the old password no longer logs in, and a "your password has been changed" email is sent.
+     - `POST /auth/users/reset_password/` is limited to 5 requests per hour per IP address; the next one gets 429. No other route is limited.
+   - Whenever a password changes (a reset, or `set_password`), every JWT issued before the change is rejected with 401, so the user logs in again everywhere.
 2. **Subjects** — each subject has two USD prices: one for a 40-minute class and one for a 60-minute class. Store prices in `DecimalField`, never `FloatField`. The API is read-only for subjects (list and retrieve); admins create and edit them in the Django admin site, so use `ReadOnlyModelViewSet` and register the model in `classes/admin.py`.
    - The subject routes are public: anyone can list and retrieve subjects without logging in.
    - A subject has a name, one or more levels and the two prices, nothing else.
@@ -117,7 +124,7 @@ No linter or formatter is configured.
 
 ## Environment
 
-Settings load `.env` from the repo root via `python-dotenv`. Copy `.env.example` to `.env` and set `DB_NAME`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`. A running MySQL server is required for the dev server, migrations, and any test that touches the database (pytest-django creates a `test_<DB_NAME>` database, so the MySQL user needs permission to create databases). MySQL's timezone tables are not required and are not assumed to be loaded: do not use anything that makes the database convert between named timezones outside UTC (e.g. `date_hierarchy` in the admin, or a `__date` / `__hour` lookup on a datetime while a non-UTC timezone is active).
+Settings load `.env` from the repo root via `python-dotenv`. Copy `.env.example` to `.env` and set `DB_NAME`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`. `FRONTEND_DOMAIN` and `FRONTEND_PROTOCOL` name the Next.js site that links in emails point to (default `localhost:3000`, `http`). `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` and `DEFAULT_FROM_EMAIL` configure SMTP; leave `EMAIL_HOST` empty to print emails in the terminal instead of sending them. A running MySQL server is required for the dev server, migrations, and any test that touches the database (pytest-django creates a `test_<DB_NAME>` database, so the MySQL user needs permission to create databases). MySQL's timezone tables are not required and are not assumed to be loaded: do not use anything that makes the database convert between named timezones outside UTC (e.g. `date_hierarchy` in the admin, or a `__date` / `__hour` lookup on a datetime while a non-UTC timezone is active).
 
 ## Testing
 
@@ -133,11 +140,13 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 - `baker.make(get_user_model())` does not create a Student (only registration does); when a test needs one, add `baker.make(Student, user=user)`.
 - One class per action, marked `@pytest.mark.django_db` (e.g. `TestCreateWeeklyClass`), with tests named `test_if_<condition>_returns_<status>`.
 - Use `rest_framework.status` constants, never bare numbers, and compare money as `Decimal`.
+- Emails are never really sent in tests: assert on `django.core.mail.outbox`.
+- The password reset throttle counts in Django's cache, which is not reset between tests. A test that calls `/auth/users/reset_password/` clears it first (`django.core.cache.cache.clear()`, e.g. in an autouse fixture in that test module).
 
 ## Architecture
 
 - `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
-- `core/` — custom user model, auth customisation, the registration signal that creates a user's `Student` profile, and `core/middleware.py`, which runs the Django admin in Asia/Karachi (see Admin timezone).
+- `core/` — custom user model, auth customisation, the registration signal that creates a user's `Student` profile, `core/throttling.py`, which rate-limits the password reset email route (see Password reset), and `core/middleware.py`, which runs the Django admin in Asia/Karachi (see Admin timezone).
 - `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; its models are `Student`, `Level`, `Subject`, `WeeklyClass` and `TrialLesson`. `classes/models.py` holds only the models; the code they share sits beside it: `constants.py` (error messages and constraint names), `validators.py`, `timeslots.py` (`DayOfWeek` and the weekly slot helpers), `querysets.py` and `rules.py`. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403, and `IsTrialLessonOpen`, the object-level permission that answers 403 when a locked trial lesson is edited or deleted. The rules that compare a weekly class with a trial lesson (`weekly_class_clash_error`, `trial_lesson_clash_error`) live in `classes/rules.py`, shared by the models' `clean()` and the serializers. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix). The schedule is not a viewset: `ScheduleView` is an `APIView` on a plain `path()` beside the router's routes in the same file. `WeeklyClass.price` is the one place a class is priced by its duration; the schedule's `price` and `weekly_cost` both come from it. `for_student(student)` on `WeeklyClassQuerySet` and `TrialLessonQuerySet` is the scoped queryset (one student's bookings, with subject and levels loaded) that the viewsets and the schedule share.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
 
@@ -162,7 +171,21 @@ Authentication is entirely delegated to Djoser + SimpleJWT; there are no hand-wr
 
 `REST_FRAMEWORK` sets only the default authentication class (JWT). No default permission class is set, so DRF's `AllowAny` default applies — new views must declare their own `permission_classes`.
 
-Email uses the console backend, so Djoser emails (activation, password reset) print to the dev server's stdout.
+`REST_FRAMEWORK` also sets one default throttle class, `core.throttling.PasswordResetThrottle` (see Password reset); it lets every other route through, so a new view needs no throttle setting.
+
+Email goes through Django 6.1's `MAILERS` setting, not the deprecated `EMAIL_BACKEND` / `EMAIL_HOST` settings. When `EMAIL_HOST` is set in `.env` the default mailer is SMTP, configured from the `EMAIL_*` variables; when it is not set the console backend is used, so Djoser emails (password reset, password changed) print to the dev server's stdout. `DEFAULT_FROM_EMAIL` comes from `.env` too.
+
+#### Password reset
+
+Password reset is Djoser's `reset_password` and `reset_password_confirm` actions, configured in `config/settings.py`; there is no view, serializer or template of our own (the emails use Djoser's stock templates).
+
+- `DJOSER["PASSWORD_RESET_CONFIRM_URL"]` is `reset-password/{uid}/{token}`. Djoser has no default for it: without it `reset_password` crashes with a 500 for a registered email.
+- `DJOSER["EMAIL_FRONTEND_DOMAIN"]` / `["EMAIL_FRONTEND_PROTOCOL"]` come from `FRONTEND_DOMAIN` / `FRONTEND_PROTOCOL` in `.env` (default `localhost:3000`, `http`), so the link opens the frontend. Without them Djoser would use the API's own host. `EMAIL_FRONTEND_SITE_NAME` is the name used in the emails.
+- `DJOSER["PASSWORD_CHANGED_EMAIL_CONFIRMATION"]` sends the "password changed" email after a reset and after `set_password`.
+- `PASSWORD_RESET_TIMEOUT` (one hour) is how long a link is valid. A link is single-use because the token is tied to the password hash and `last_login`, and Djoser updates both on confirm.
+- `SIMPLE_JWT["CHECK_REVOKE_TOKEN"]` puts a hash of the user's password in every token and rejects an access token whose hash no longer matches. SimpleJWT does not make that check on `/auth/jwt/refresh/`, so `core.serializers.TokenRefreshSerializer` (registered as `SIMPLE_JWT["TOKEN_REFRESH_SERIALIZER"]`) makes it for refresh tokens. Together they log a user out everywhere after a password change. `/auth/jwt/verify/` only checks a token's signature and expiry, not the password hash.
+- `core.throttling.PasswordResetThrottle` limits `reset_password` to `DEFAULT_THROTTLE_RATES["password_reset"]` (5/hour) per IP address, for anonymous and logged-in callers alike. Djoser's `UserViewSet` cannot be given a throttle without subclassing the view, so the class is a DRF default that returns early for every other action and view. Its counter is in Django's default cache, which is in-memory and per process: with several workers the limit is per worker until a shared cache is configured, and behind a proxy `REST_FRAMEWORK["NUM_PROXIES"]` must be set for the real client IP to be used.
+- `reset_username` has the same missing-URL crash (`USERNAME_RESET_CONFIRM_URL` is not set); it is not part of this feature.
 
 ### Admin timezone
 

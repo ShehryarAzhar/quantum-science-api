@@ -137,11 +137,32 @@ STATIC_URL = "static/"
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
-}
+# Emails are sent over SMTP when EMAIL_HOST is set in .env; without it they
+# are printed to the dev server's stdout.
+if os.getenv("EMAIL_HOST"):
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+            "OPTIONS": {
+                "host": os.getenv("EMAIL_HOST"),
+                "port": int(os.getenv("EMAIL_PORT") or 587),
+                "username": os.getenv("EMAIL_HOST_USER", ""),
+                "password": os.getenv("EMAIL_HOST_PASSWORD", ""),
+                "use_tls": (os.getenv("EMAIL_USE_TLS") or "true").lower() == "true",
+            },
+        },
+    }
+else:
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.console.EmailBackend",
+        },
+    }
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL") or "webmaster@localhost"
+
+# How long the link in a password reset email stays valid, in seconds.
+PASSWORD_RESET_TIMEOUT = 60 * 60
 
 AUTH_USER_MODEL = "core.User"
 
@@ -150,15 +171,30 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # Limits POST /auth/users/reset_password/ only; every other route passes.
+    "DEFAULT_THROTTLE_CLASSES": ("core.throttling.PasswordResetThrottle",),
+    "DEFAULT_THROTTLE_RATES": {
+        "password_reset": "5/hour",
+    },
 }
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("JWT",),
+    # A token issued before the user's password changed is rejected.
+    "CHECK_REVOKE_TOKEN": True,
+    # SimpleJWT checks that only on access tokens; this does it on refresh.
+    "TOKEN_REFRESH_SERIALIZER": "core.serializers.TokenRefreshSerializer",
 }
 
 DJOSER = {
     # JWT only: rest_framework.authtoken is not installed.
     "TOKEN_MODEL": None,
+    # The link in the reset email opens a page on the frontend, not this API.
+    "PASSWORD_RESET_CONFIRM_URL": "reset-password/{uid}/{token}",
+    "PASSWORD_CHANGED_EMAIL_CONFIRMATION": True,
+    "EMAIL_FRONTEND_DOMAIN": os.getenv("FRONTEND_DOMAIN") or "localhost:3000",
+    "EMAIL_FRONTEND_PROTOCOL": os.getenv("FRONTEND_PROTOCOL") or "http",
+    "EMAIL_FRONTEND_SITE_NAME": "Quantum Science",
     "SERIALIZERS": {
         "user_create": "core.serializers.UserCreateSerializer",
         "current_user": "core.serializers.CurrentUserSerializer",
