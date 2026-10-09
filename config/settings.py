@@ -85,7 +85,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("DB_NAME", "quantum-science"),
+        "NAME": os.getenv("DB_NAME", "science-nest"),
         "HOST": os.getenv("DB_HOST", "localhost"),
         "USER": os.getenv("DB_USER", "root"),
         "PASSWORD": os.getenv("DB_PASSWORD", ""),
@@ -159,7 +159,9 @@ else:
         },
     }
 
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL") or "webmaster@localhost"
+DEFAULT_FROM_EMAIL = (
+    os.getenv("DEFAULT_FROM_EMAIL") or "Science Nest <webmaster@localhost>"
+)
 
 # How long the link in a password reset email stays valid, in seconds.
 PASSWORD_RESET_TIMEOUT = 60 * 60
@@ -194,7 +196,7 @@ DJOSER = {
     "PASSWORD_CHANGED_EMAIL_CONFIRMATION": True,
     "EMAIL_FRONTEND_DOMAIN": os.getenv("FRONTEND_DOMAIN") or "localhost:3000",
     "EMAIL_FRONTEND_PROTOCOL": os.getenv("FRONTEND_PROTOCOL") or "http",
-    "EMAIL_FRONTEND_SITE_NAME": "Quantum Science",
+    "EMAIL_FRONTEND_SITE_NAME": "Science Nest",
     "SERIALIZERS": {
         "user_create": "core.serializers.UserCreateSerializer",
         "current_user": "core.serializers.CurrentUserSerializer",
