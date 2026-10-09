@@ -85,7 +85,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("DB_NAME", "quantum-science"),
+        "NAME": os.getenv("DB_NAME", "science-nest"),
         "HOST": os.getenv("DB_HOST", "localhost"),
         "USER": os.getenv("DB_USER", "root"),
         "PASSWORD": os.getenv("DB_PASSWORD", ""),
