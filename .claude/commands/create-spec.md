@@ -1,11 +1,11 @@
 ---
-description: Create a spec file and feature branch for a Science Tutor API feature. Pass a feature name e.g. /create-spec trial-lessons
+description: Create a spec file and feature branch for a Science Nest API feature. Pass a feature name e.g. /create-spec trial-lessons
 argument-hint: users | subjects | weekly-classes | trial-lessons | schedule | <number> <feature name>
 allowed-tools: Read, Write, Glob, Grep, Bash(git:*)
 ---
 
 You are a senior developer spinning up a new feature for the
-Science Tutor API. Always follow the rules in CLAUDE.md.
+Science Nest API. Always follow the rules in CLAUDE.md.
 
 User input: $ARGUMENTS
 

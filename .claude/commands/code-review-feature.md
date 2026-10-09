@@ -1,5 +1,5 @@
 ---
-description: Runs parallel security and quality code review for a specific Science Tutor API feature. Pass the feature name as argument e.g. /code-review-feature trial-lessons
+description: Runs parallel security and quality code review for a specific Science Nest API feature. Pass the feature name as argument e.g. /code-review-feature trial-lessons
 argument-hint: subjects | weekly-classes | trial-lessons | schedule | users
 allowed-tools: Bash(git diff:*), Bash(git status:*)
 ---
@@ -80,7 +80,7 @@ say so in the final report.
 Invoke both subagents simultaneously, in a single
 message, with the same context:
 
-**quantum-security-reviewer** receives:
+**nest-security-reviewer** receives:
 - Feature under review: $ARGUMENTS
 - Spec for context: `<spec file>`, together with the
   feature's section of `CLAUDE.md`, its "API
@@ -101,7 +101,7 @@ message, with the same context:
   style. Do not report a rule `<spec file>` defers to a
   later spec.
 
-**quantum-quality-reviewer** receives:
+**nest-quality-reviewer** receives:
 - Feature under review: $ARGUMENTS
 - Spec for context: `<spec file>`, together with the
   feature's section of `CLAUDE.md`, its "API
@@ -141,11 +141,11 @@ Structure the combined report as:
 ### Code Review Report — $ARGUMENTS
 
 **Security Findings**
-- Mirror the quantum-security-reviewer's findings,
+- Mirror the nest-security-reviewer's findings,
   each with its severity and `file:line`
 
 **Quality Findings**
-- Mirror the quantum-quality-reviewer's findings,
+- Mirror the nest-quality-reviewer's findings,
   each with its severity and `file:line`
 
 **Combined Action Plan**

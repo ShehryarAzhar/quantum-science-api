@@ -139,7 +139,7 @@ Admin-only: creating a subject, editing its name, levels or prices, and deleting
   - "Implemented vs Stub Routes" > Subjects: both routes go from Stub to Implemented
   - Product requirements: the "Only requirement 1 is built so far" line, and requirement 2 gains the decisions above (public access, unique name, the level and its four values, prices zero or more)
   - Architecture: `classes/` no longer has "only `Student`"; describe `Subject` and that `classes/urls.py` is mounted at the root
-- `.claude/agents/quantum-test-writer.md` — its copies of the subject rules describe `levels`. The other command and agent files do not describe subject fields and are unchanged
+- `.claude/agents/nest-test-writer.md` — its copies of the subject rules describe `levels`. The other command and agent files do not describe subject fields and are unchanged
 - For the change to several levels per subject: `classes/serializers.py`, `classes/views.py`, `classes/admin.py`, and, because a weekly class returns its subject's levels, `.claude/specs/03-weekly-classes.md` and Product requirements 3 in `CLAUDE.md`
 
 ## Files to create

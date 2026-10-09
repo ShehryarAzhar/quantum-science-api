@@ -1,5 +1,5 @@
 ---
-description: Writes and runs tests for a specific Science Tutor API feature. Pass the feature name as argument e.g. /test-feature trial-lessons
+description: Writes and runs tests for a specific Science Nest API feature. Pass the feature name as argument e.g. /test-feature trial-lessons
 argument-hint: subjects | weekly-classes | trial-lessons | schedule | users
 allowed-tools: Bash(uv run pytest:*)
 ---
@@ -54,7 +54,7 @@ say so in the final summary.
 
 ## Step 1: Write Tests
 
-Invoke the **quantum-test-writer** subagent with the
+Invoke the **nest-test-writer** subagent with the
 following context:
 
 - Feature under test: $ARGUMENTS
@@ -84,7 +84,7 @@ following context:
   DB side effects, and every booking rule the spec
   lists for this feature.
 
-Wait for quantum-test-writer to fully complete and
+Wait for nest-test-writer to fully complete and
 confirm the test file has been written and its tests
 are collected before proceeding to Step 2.
 
@@ -92,8 +92,8 @@ are collected before proceeding to Step 2.
 
 ## Step 2: Run Tests
 
-Once quantum-test-writer has finished, invoke the
-**quantum-test-runner** subagent with the following
+Once nest-test-writer has finished, invoke the
+**nest-test-runner** subagent with the following
 context:
 
 - Test file to execute: `<test file>`
@@ -125,11 +125,11 @@ context:
   implementation, regardless of what the test results
   show
 - Do NOT run any tests beyond `<test file>`
-- If quantum-test-writer reports it could not write
+- If nest-test-writer reports it could not write
   the test file, or asks a question about ambiguous
   behavior, stop and report that — do NOT proceed to
   Step 2
-- If quantum-test-runner reports an environment
+- If nest-test-runner reports an environment
   problem (MySQL unreachable, missing migrations),
   report it as such — do NOT give a pass or fail
   verdict
@@ -148,7 +148,7 @@ summary:
   of which spec requirement it validates
 
 **Step 2 — Test Results**
-- Mirror the quantum-test-runner's structured report
+- Mirror the nest-test-runner's structured report
 
 **Verdict**
 One of:

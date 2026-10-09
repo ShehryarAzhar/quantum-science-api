@@ -196,7 +196,7 @@ Admin-only: marking a trial lesson completed (and un-marking it), viewing and ed
   - Product requirements: the "Only requirements 1, 2 and 3 are built so far" line; requirement 4 gains the level rules (Requirements 12 to 16) and the decisions above (UTC, the single `starts_at` field, 403 when locked, no booking in the past, owned by a Student with 403 without one, subject and level protected from deletion, subject and level shapes); requirement 3 drops "Not built yet" from the trial lesson rule, says `day` and `time` are UTC, and extends the two level-deletion rules to trial lessons
   - API conventions: state that every date and time in the API is UTC
   - Architecture: `classes/` lists `TrialLesson` and `IsTrialLessonOpen`
-- `.claude/agents/quantum-test-writer.md`, `.claude/agents/quantum-security-reviewer.md` and `.claude/agents/quantum-test-runner.md` — their copies of the trial lesson and weekly class rules gain the level, the `starts_at` field and the 403 lock, in the same change. Any other command or agent file that turns out to carry these rules gets the same update
+- `.claude/agents/nest-test-writer.md`, `.claude/agents/nest-security-reviewer.md` and `.claude/agents/nest-test-runner.md` — their copies of the trial lesson and weekly class rules gain the level, the `starts_at` field and the 403 lock, in the same change. Any other command or agent file that turns out to carry these rules gets the same update
 - `.claude/specs/03-weekly-classes.md` — its Deferred rules entry for the trial lesson clash is marked as picked up by this spec, and its timezone note (Requirements 14) says UTC
 - `.claude/specs/02-subjects.md` — its Admin section mentions that `SubjectAdminForm` and `PROTECT` now cover trial lessons too
 

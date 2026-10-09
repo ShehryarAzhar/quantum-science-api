@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Backend API for a Science Tutor web application. This repo is backend only: a separate Next.js + TypeScript frontend consumes the API, so there are no templates or server-rendered pages here.
+Backend API for Science Nest, a science tutoring web application. This repo is backend only: a separate Next.js + TypeScript frontend consumes the API, so there are no templates or server-rendered pages here.
 
 ## Stack
 
@@ -83,8 +83,8 @@ Each feature goes through the same four steps, driven by the slash commands in `
 
 1. `/create-spec <feature>` — needs a clean working tree. It branches `feature/<feature>` off an up-to-date `main` and writes the feature's spec file. Build features in the order of the table below: later specs pick up rules that earlier ones deferred.
 2. Implement from the spec, in Plan Mode. Do not write tests during implementation. Update the route tables in the same change.
-3. `/test-feature <feature>` — `quantum-test-writer` writes the test file from the spec, then `quantum-test-runner` runs only that file.
-4. `/code-review-feature <feature>` — `quantum-security-reviewer` and `quantum-quality-reviewer` review the branch's changes in parallel. Apply the action plan only after the user approves it, then re-run `/test-feature`.
+3. `/test-feature <feature>` — `nest-test-writer` writes the test file from the spec, then `nest-test-runner` runs only that file.
+4. `/code-review-feature <feature>` — `nest-security-reviewer` and `nest-quality-reviewer` review the branch's changes in parallel. Apply the action plan only after the user approves it, then re-run `/test-feature`.
 
 | Feature | Requirement | Spec file | Routes | Test file |
 | --- | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ Each feature goes through the same four steps, driven by the slash commands in `
 | `trial-lessons` | 4 | `.claude/specs/04-trial-lessons.md` | `/trial-lessons/` | `classes/tests/test_trial_lessons.py` |
 | `schedule` | 5 | `.claude/specs/05-schedule.md` | `/schedule/` | `classes/tests/test_schedule.py` |
 
-- The test runner and both reviewers are read-only and never fix anything. An implementation bug is fixed in the main session; a test bug goes back to `quantum-test-writer`. Never weaken, skip or delete a test to make it pass.
+- The test runner and both reviewers are read-only and never fix anything. An implementation bug is fixed in the main session; a test bug goes back to `nest-test-writer`. Never weaken, skip or delete a test to make it pass.
 - `/test-feature` and `/code-review-feature` refuse to run while the feature's routes are still marked Stub.
 
 ### Specs
@@ -132,7 +132,7 @@ Tests run through pytest with `pytest-django` and `model-bakery` (`pytest.ini` s
 
 The `tests.py` stub that `startapp` generates is not collected and clashes with a `tests/` package of the same name — delete it when creating the app's `tests/` folder.
 
-Tests are normally written by `quantum-test-writer` through `/test-feature`. Tests written by hand follow the same conventions:
+Tests are normally written by `nest-test-writer` through `/test-feature`. Tests written by hand follow the same conventions:
 
 - Write tests from the spec, not from the implementation; read the source only for field names and paths.
 - Shared fixtures (`api_client`, `authenticate`) live in a `conftest.py` at the repo root so both apps can use them.
@@ -145,7 +145,7 @@ Tests are normally written by `quantum-test-writer` through `/test-feature`. Tes
 
 ## Architecture
 
-- `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split.
+- `config/` — the Django project (settings, root URLconf, WSGI/ASGI). There is a single settings module; no per-environment split. `config/urls.py` also sets the Django admin's site header, site title and index title ("Science Nest administration", "Science Nest admin", "Site administration").
 - `core/` — custom user model, auth customisation, the registration signal that creates a user's `Student` profile, `core/throttling.py`, which rate-limits the password reset email route (see Password reset), and `core/middleware.py`, which runs the Django admin in Asia/Karachi (see Admin timezone).
 - `classes/` — domain app for the `Student` profile, subjects, weekly classes, trial lessons and the schedule; its models are `Student`, `Level`, `Subject`, `WeeklyClass` and `TrialLesson`. `classes/models.py` holds only the models; the code they share sits beside it: `constants.py` (error messages and constraint names), `validators.py`, `timeslots.py` (`DayOfWeek` and the weekly slot helpers), `querysets.py` and `rules.py`. A subject's levels are a many-to-many to `Level`, whose four rows are created by the data migration `classes/migrations/0005_seed_levels.py`. `classes/permissions.py` holds `IsStudent`, which booking views list after `IsAuthenticated` so a user without a Student gets 403, and `IsTrialLessonOpen`, the object-level permission that answers 403 when a locked trial lesson is edited or deleted. The rules that compare a weekly class with a trial lesson (`weekly_class_clash_error`, `trial_lesson_clash_error`) live in `classes/rules.py`, shared by the models' `clean()` and the serializers. Its viewsets are registered on the `SimpleRouter` in `classes/urls.py`, which `config/urls.py` mounts at the root (no app prefix). The schedule is not a viewset: `ScheduleView` is an `APIView` on a plain `path()` beside the router's routes in the same file. `WeeklyClass.price` is the one place a class is priced by its duration; the schedule's `price` and `weekly_cost` both come from it. `for_student(student)` on `WeeklyClassQuerySet` and `TrialLessonQuerySet` is the scoped queryset (one student's bookings, with subject and levels loaded) that the viewsets and the schedule share.
 - `.claude/` — Claude Code slash commands (`commands/`), subagents (`agents/`) and feature specs (`specs/`, created by `/create-spec`). See Claude Code tooling.
@@ -173,14 +173,14 @@ Authentication is entirely delegated to Djoser + SimpleJWT; there are no hand-wr
 
 `REST_FRAMEWORK` also sets one default throttle class, `core.throttling.PasswordResetThrottle` (see Password reset); it lets every other route through, so a new view needs no throttle setting.
 
-Email goes through Django 6.1's `MAILERS` setting, not the deprecated `EMAIL_BACKEND` / `EMAIL_HOST` settings. When `EMAIL_HOST` is set in `.env` the default mailer is SMTP, configured from the `EMAIL_*` variables; when it is not set the console backend is used, so Djoser emails (password reset, password changed) print to the dev server's stdout. `DEFAULT_FROM_EMAIL` comes from `.env` too.
+Email goes through Django 6.1's `MAILERS` setting, not the deprecated `EMAIL_BACKEND` / `EMAIL_HOST` settings. When `EMAIL_HOST` is set in `.env` the default mailer is SMTP, configured from the `EMAIL_*` variables; when it is not set the console backend is used, so Djoser emails (password reset, password changed) print to the dev server's stdout. `DEFAULT_FROM_EMAIL` comes from `.env` too; when it is empty the sender is `Science Nest <webmaster@localhost>`.
 
 #### Password reset
 
 Password reset is Djoser's `reset_password` and `reset_password_confirm` actions, configured in `config/settings.py`; there is no view, serializer or template of our own (the emails use Djoser's stock templates).
 
 - `DJOSER["PASSWORD_RESET_CONFIRM_URL"]` is `reset-password/{uid}/{token}`. Djoser has no default for it: without it `reset_password` crashes with a 500 for a registered email.
-- `DJOSER["EMAIL_FRONTEND_DOMAIN"]` / `["EMAIL_FRONTEND_PROTOCOL"]` come from `FRONTEND_DOMAIN` / `FRONTEND_PROTOCOL` in `.env` (default `localhost:3000`, `http`), so the link opens the frontend. Without them Djoser would use the API's own host. `EMAIL_FRONTEND_SITE_NAME` is the name used in the emails.
+- `DJOSER["EMAIL_FRONTEND_DOMAIN"]` / `["EMAIL_FRONTEND_PROTOCOL"]` come from `FRONTEND_DOMAIN` / `FRONTEND_PROTOCOL` in `.env` (default `localhost:3000`, `http`), so the link opens the frontend. Without them Djoser would use the API's own host. `EMAIL_FRONTEND_SITE_NAME` ("Science Nest") is the name used in the emails.
 - `DJOSER["PASSWORD_CHANGED_EMAIL_CONFIRMATION"]` sends the "password changed" email after a reset and after `set_password`.
 - `PASSWORD_RESET_TIMEOUT` (one hour) is how long a link is valid. A link is single-use because the token is tied to the password hash and `last_login`, and Djoser updates both on confirm.
 - `SIMPLE_JWT["CHECK_REVOKE_TOKEN"]` puts a hash of the user's password in every token and rejects an access token whose hash no longer matches. SimpleJWT does not make that check on `/auth/jwt/refresh/`, so `core.serializers.TokenRefreshSerializer` (registered as `SIMPLE_JWT["TOKEN_REFRESH_SERIALIZER"]`) makes it for refresh tokens. Together they log a user out everywhere after a password change. `/auth/jwt/verify/` only checks a token's signature and expiry, not the password hash.
@@ -204,15 +204,15 @@ The database and the API are UTC; the Django admin shows and accepts Asia/Karach
 Commands (`.claude/commands/`):
 
 - `/create-spec <feature>` — creates the feature branch and writes `.claude/specs/<NN>-<feature>.md`. Writes no application code.
-- `/test-feature <feature>` — runs `quantum-test-writer`, then `quantum-test-runner`. Fixes nothing.
+- `/test-feature <feature>` — runs `nest-test-writer`, then `nest-test-runner`. Fixes nothing.
 - `/code-review-feature <feature>` — runs both reviewers in parallel and merges their reports. Edits files only after the user approves the action plan.
 
 Agents (`.claude/agents/`):
 
-- `quantum-test-writer` — writes tests from the spec. It may only touch `<app>/tests/` and the root `conftest.py`, and keeps its own project memory under `.claude/agent-memory/`.
-- `quantum-test-runner` — runs one test file and classifies each failure as an implementation bug, a test bug or an environment problem. Read-only.
-- `quantum-security-reviewer` — reviews changed code for permissions, queryset scoping, serializer exposure and rule bypasses. Read-only.
-- `quantum-quality-reviewer` — reviews changed code for project conventions, Django and DRF idioms and spec conformance. Read-only.
+- `nest-test-writer` — writes tests from the spec. It may only touch `<app>/tests/` and the root `conftest.py`, and keeps its own project memory under `.claude/agent-memory/`.
+- `nest-test-runner` — runs one test file and classifies each failure as an implementation bug, a test bug or an environment problem. Read-only.
+- `nest-security-reviewer` — reviews changed code for permissions, queryset scoping, serializer exposure and rule bypasses. Read-only.
+- `nest-quality-reviewer` — reviews changed code for project conventions, Django and DRF idioms and spec conformance. Read-only.
 
 The command and agent files refer to this file by heading name and requirement number ("Product requirements 4", "API conventions", "Architecture > Auth", "Implemented vs Stub Routes") and carry their own copies of the booking rules and the feature table. When a product requirement, an API convention, a heading or a feature name changes here, update those files in the same change.
 

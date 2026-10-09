@@ -145,7 +145,7 @@ No admin changes. The feature adds no model, and there is nothing admin-only: an
   - "Implemented vs Stub Routes" > My schedule: `GET /schedule/` goes from Stub to Implemented
   - Product requirements: the "Only requirements 1, 2, 3 and 4 are built so far" line; requirement 5 gains the decisions above (the three parts `weekly_classes`, `trial_lesson`, `weekly_cost`; `price` on each class; a finished trial lesson is still shown; `null` and `0.00` when there is nothing; 403 without a Student; read-only; prices read live from the subject)
   - Architecture: `classes/` mentions `ScheduleView` and that it is a plain path beside the router in `classes/urls.py`
-- `.claude/agents/quantum-test-writer.md`, `.claude/agents/quantum-security-reviewer.md` and `.claude/agents/quantum-quality-reviewer.md` — their copies of the schedule rules gain the decisions above, in the same change. Any other command or agent file that turns out to carry these rules gets the same update
+- `.claude/agents/nest-test-writer.md`, `.claude/agents/nest-security-reviewer.md` and `.claude/agents/nest-quality-reviewer.md` — their copies of the schedule rules gain the decisions above, in the same change. Any other command or agent file that turns out to carry these rules gets the same update
 - `.claude/specs/03-weekly-classes.md` and `.claude/specs/04-trial-lessons.md` — their Deferred rules entries for the weekly cost and the schedule are marked as picked up by this spec
 
 ## Files to create

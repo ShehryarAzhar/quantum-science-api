@@ -202,7 +202,7 @@ Admin-only: viewing, creating, editing and deleting any student's weekly classes
   - Product requirements: the "Only requirements 1 and 2 are built so far" line, and requirement 3 gains the decisions above (owned by a Student, 403 without one, day codes and `day_display`, subject sent as an id and returned nested, subject protected from deletion, editable)
   - Architecture: `classes/` no longer has "only `Student` and `Subject`"; mention `WeeklyClass` and `classes/permissions.py`
 - `.claude/agents/` and `.claude/commands/` — every file that carries its own copy of the weekly class rules gets the same decisions, in the same change
-- For the level of a weekly class: `classes/models.py`, `classes/serializers.py`, `classes/views.py`, `classes/admin.py`, Product requirements 3 in `CLAUDE.md`, the Admin section of `.claude/specs/02-subjects.md`, and `.claude/agents/quantum-test-writer.md` and `.claude/agents/quantum-security-reviewer.md`
+- For the level of a weekly class: `classes/models.py`, `classes/serializers.py`, `classes/views.py`, `classes/admin.py`, Product requirements 3 in `CLAUDE.md`, the Admin section of `.claude/specs/02-subjects.md`, and `.claude/agents/nest-test-writer.md` and `.claude/agents/nest-security-reviewer.md`
 
 ## Files to create
 - `classes/permissions.py`

@@ -86,7 +86,7 @@ No views are written. `config/urls.py` already mounts `djoser.urls` and `djoser.
 - `core/admin.py`
 - `config/settings.py`
 - `CLAUDE.md` (Product requirements 1, Architecture, Architecture > Auth, Testing; the route tables are unchanged because no route is added)
-- `.claude/agents/quantum-quality-reviewer.md`, `.claude/agents/quantum-security-reviewer.md`, `.claude/agents/quantum-test-writer.md`
+- `.claude/agents/nest-quality-reviewer.md`, `.claude/agents/nest-security-reviewer.md`, `.claude/agents/nest-test-writer.md`
 - `.claude/commands/test-feature.md`, `.claude/commands/code-review-feature.md`
 
 ## Files to create
